@@ -10,3 +10,4 @@ CREATE TABLE IF NOT EXISTS "CrossLinesGameDB"."words"  (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
