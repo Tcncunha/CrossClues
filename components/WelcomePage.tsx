@@ -1,9 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { Lang } from '@/app/page';
 
 interface Props {
   onPlay: () => void;
+  lang: Lang;
+  onLangChange: (l: Lang) => void;
 }
 
 type Tab = 'home' | 'howto' | 'tips';
@@ -42,7 +45,7 @@ const content = {
     objective: 'Objetivo',
     objectiveText: 'Revele todas as celulas da grade acertando a qual intersecao cada dica se refere.',
     steps: [
-      { title: 'O Dono da Dicas', text: 'Um jogador e escolhido como Dador de Dicas a cada turno. Ele ve duas palavras cruzadas em cada celula vazia e deve fornecer uma dica de uma palavra que conecta ambas.' },
+      { title: 'O Dador de Dicas', text: 'Um jogador e escolhido como Dador de Dicas a cada turno. Ele ve duas palavras cruzadas em cada celula vazia e deve fornecer uma dica de uma palavra que conecta ambas.' },
       { title: 'A Dica', text: 'O Dador de Dicas escolhe uma celula vazia e digita uma palavra que sugere tanto a palavra da linha quanto a palavra da coluna que se cruzam naquela celula.' },
       { title: 'O Palpite', text: 'Os outros jogadores veem a dica e devem descobrir a qual celula da grade ela se refere. Eles clicam na celula que acham que corresponde.' },
       { title: 'Pontuacao', text: 'Acertou: +1 ponto. Errou: a dica e descartada e o turno passa para o proximo jogador.' },
@@ -57,12 +60,11 @@ const content = {
     playersTitle: 'Jogadores',
     playersDesc: '2 a 6 jogadores. Um da dicas enquanto os outros tentam acertar. Os papeis revezam a cada turno.',
     rolesTitle: 'Papeis',
-    rolesDesc: 'Dono de Dicas: fornece dicas de uma palavra. Adivinhadores: tentam identificar a celula correta. Os papeis revezam a cada turno.',
+    rolesDesc: 'Dador de Dicas: fornece dicas de uma palavra. Adivinhadores: tentam identificar a celula correta. Os papeis revezam a cada turno.',
   },
 };
 
-export default function WelcomePage({ onPlay }: Props) {
-  const [lang, setLang] = useState<'en' | 'pt'>('en');
+export default function WelcomePage({ onPlay, lang, onLangChange }: Props) {
   const [tab, setTab] = useState<Tab>('home');
   const t = content[lang];
 
@@ -81,13 +83,13 @@ export default function WelcomePage({ onPlay }: Props) {
             <div className="flex-1 flex justify-end">
               <div className="flex bg-bg-primary rounded-cell border border-border overflow-hidden">
                 <button
-                  onClick={() => setLang('en')}
+                  onClick={() => onLangChange('en')}
                   className={`px-3 py-1.5 text-sm font-medium transition-colors ${lang === 'en' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
                 >
                   EN
                 </button>
                 <button
-                  onClick={() => setLang('pt')}
+                  onClick={() => onLangChange('pt')}
                   className={`px-3 py-1.5 text-sm font-medium transition-colors ${lang === 'pt' ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
                 >
                   PT
@@ -117,12 +119,10 @@ export default function WelcomePage({ onPlay }: Props) {
           {tab === 'home' && (
             <div className="animate-fade-in space-y-6">
               <p className="text-text-secondary leading-relaxed">{t.overview}</p>
-
               <div>
                 <h2 className="text-lg font-semibold text-text-primary mb-2">{t.objective}</h2>
                 <p className="text-text-secondary leading-relaxed">{t.objectiveText}</p>
               </div>
-
               <div className="p-4 bg-success/10 border border-success/30 rounded-cell">
                 <p className="text-success font-medium">{t.gameEnds}</p>
               </div>
@@ -153,22 +153,18 @@ export default function WelcomePage({ onPlay }: Props) {
                   {t.tip}
                 </p>
               </div>
-
               <div>
                 <h3 className="text-text-primary font-medium mb-1">{t.difficultyTitle}</h3>
                 <p className="text-text-secondary text-sm leading-relaxed">{t.difficultyDesc}</p>
               </div>
-
               <div>
                 <h3 className="text-text-primary font-medium mb-1">{t.gridSizeTitle}</h3>
                 <p className="text-text-secondary text-sm leading-relaxed">{t.gridSizeDesc}</p>
               </div>
-
               <div>
                 <h3 className="text-text-primary font-medium mb-1">{t.playersTitle}</h3>
                 <p className="text-text-secondary text-sm leading-relaxed">{t.playersDesc}</p>
               </div>
-
               <div>
                 <h3 className="text-text-primary font-medium mb-1">{t.rolesTitle}</h3>
                 <p className="text-text-secondary text-sm leading-relaxed">{t.rolesDesc}</p>

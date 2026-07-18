@@ -14,14 +14,15 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-let WORD_LISTS = { facil: [], medio: [], dificil: [] };
-let wordsLoaded = false;
+const wordCache = {};
 
-async function loadWordsFromSupabase() {
+async function loadWordsByLanguage(language) {
+  if (wordCache[language]) return wordCache[language];
+
   const { data, error } = await supabase
     .from('words')
     .select('word, Level')
-    .eq('language', 'EN')
+    .eq('language', language)
     .eq('is_active', true);
 
   if (error) throw error;
@@ -35,15 +36,8 @@ async function loadWordsFromSupabase() {
     else if (level === 3) result.dificil.push(word);
   });
 
+  wordCache[language] = result;
   return result;
-}
-
-async function ensureWords() {
-  if (!wordsLoaded) {
-    WORD_LISTS = await loadWordsFromSupabase();
-    wordsLoaded = true;
-  }
-  return WORD_LISTS;
 }
 
 const rooms = new Map();
@@ -87,10 +81,8 @@ function createGrid(words, size) {
   return { rows, cols, grid };
 }
 
-function createRoom(hostName, difficulty, gridSize) {
+function createRoom(hostName, difficulty, gridSize, wordLanguage) {
   const code = generateRoomCode();
-  const words = WORD_LISTS[difficulty] || WORD_LISTS.medio;
-  const { rows, cols, grid } = createGrid(words, gridSize);
   const room = {
     code,
     host: null,
@@ -98,9 +90,10 @@ function createRoom(hostName, difficulty, gridSize) {
     state: 'waiting',
     difficulty: difficulty || 'medio',
     gridSize: gridSize || 4,
-    rows,
-    cols,
-    grid,
+    wordLanguage: wordLanguage || 'EN',
+    rows: [],
+    cols: [],
+    grid: [],
     currentTurn: 0,
     scores: {},
     cluesGiven: 0,
@@ -134,6 +127,7 @@ function getRoomState(room) {
     state: room.state,
     difficulty: room.difficulty,
     gridSize: room.gridSize,
+    wordLanguage: room.wordLanguage,
     rows: room.rows,
     cols: room.cols,
     grid: safeGrid,
@@ -161,21 +155,13 @@ app.prepare().then(() => {
 
   // REST API routes
   server.get('/api/reload-words', async (req, res) => {
-    WORD_LISTS = await loadWordsFromSupabase();
-    wordsLoaded = true;
-    const counts = {
-      facil: WORD_LISTS.facil?.length || 0,
-      medio: WORD_LISTS.medio?.length || 0,
-      dificil: WORD_LISTS.dificil?.length || 0,
-    };
-    res.json({ success: true, counts });
+    Object.keys(wordCache).forEach(k => delete wordCache[k]);
+    res.json({ success: true, message: 'Word cache cleared' });
   });
 
   server.get('/api/words', (req, res) => {
     res.json({
-      facil: WORD_LISTS.facil?.length || 0,
-      medio: WORD_LISTS.medio?.length || 0,
-      dificil: WORD_LISTS.dificil?.length || 0,
+      wordCacheKeys: Object.keys(wordCache),
     });
   });
 
@@ -220,9 +206,8 @@ app.prepare().then(() => {
   io.on('connection', (socket) => {
     console.log(`Jogador conectado: ${socket.id}`);
 
-    socket.on('create-room', async ({ playerName, difficulty, gridSize }, callback) => {
-      await ensureWords();
-      const room = createRoom(playerName, difficulty || 'medio', gridSize || 4);
+    socket.on('create-room', async ({ playerName, difficulty, gridSize, wordLanguage }, callback) => {
+      const room = createRoom(playerName, difficulty || 'medio', gridSize || 4, wordLanguage || 'EN');
       const player = { id: socket.id, name: playerName, isHost: true, color: getPlayerColor(0) };
       room.host = socket.id;
       room.players.push(player);
@@ -249,8 +234,10 @@ app.prepare().then(() => {
     socket.on('start-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
-      await ensureWords();
-      const { rows, cols, grid } = createGrid(WORD_LISTS[room.difficulty] || WORD_LISTS.medio, room.gridSize);
+      if (room.players.length < 1) return callback({ success: false, error: 'Minimo 1 jogador' });
+      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      const words = wordLists[room.difficulty] || wordLists.medio;
+      const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
       Object.keys(room.scores).forEach(k => { room.scores[k] = 0; });
@@ -323,8 +310,9 @@ app.prepare().then(() => {
     socket.on('restart-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
-      await ensureWords();
-      const { rows, cols, grid } = createGrid(WORD_LISTS[room.difficulty] || WORD_LISTS.medio, room.gridSize);
+      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      const words = wordLists[room.difficulty] || wordLists.medio;
+      const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
       Object.keys(room.scores).forEach(k => { room.scores[k] = 0; });

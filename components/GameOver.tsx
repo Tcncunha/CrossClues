@@ -1,21 +1,28 @@
 'use client';
 
-import { Room } from '@/app/page';
+import { Room, Lang } from '@/app/page';
 
 interface Props {
   room: Room;
   playerId: string;
   onRestart: () => void;
   onBackToMenu: () => void;
+  lang: Lang;
 }
 
-export default function GameOver({ room, playerId, onRestart, onBackToMenu }: Props) {
+const ui = {
+  en: { title: 'Game Over!', grid: 'Final Grid', cells: 'cells', playAgain: 'Play Again', backToMenu: 'Back to Menu' },
+  pt: { title: 'Fim de Jogo!', grid: 'Grade Final', cells: 'celulas', playAgain: 'Jogar Novamente', backToMenu: 'Voltar ao Menu' },
+};
+
+export default function GameOver({ room, playerId, onRestart, onBackToMenu, lang }: Props) {
+  const t = ui[lang];
   const sorted = room.players
     .map(p => ({ ...p, score: room.scores[p.id] || 0 }))
     .sort((a, b) => b.score - a.score);
 
   const ranks = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣'];
-
+  const colLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').slice(0, room.gridSize);
   const totalRevealed = room.grid.flat().filter(c => c.revealed).length;
   const totalCells = room.gridSize * room.gridSize;
 
@@ -23,7 +30,7 @@ export default function GameOver({ room, playerId, onRestart, onBackToMenu }: Pr
     <div className="flex flex-col items-center">
       <div className="w-full bg-bg-card rounded-card p-8 border border-border shadow-lg">
         <h2 className="text-2xl font-bold text-center bg-gradient-to-r from-accent-light to-accent bg-clip-text text-transparent mb-6">
-          Fim de Jogo!
+          {t.title}
         </h2>
 
         <div className="mb-6">
@@ -41,27 +48,29 @@ export default function GameOver({ room, playerId, onRestart, onBackToMenu }: Pr
 
         <div className="mb-6">
           <h3 className="text-sm text-text-secondary font-medium text-center mb-3">
-            Grade Final ({totalRevealed}/{totalCells} celulas)
+            {t.grid} ({totalRevealed}/{totalCells} {t.cells})
           </h3>
           <div className="overflow-x-auto">
-            <div className="inline-grid gap-1 mx-auto" style={{ gridTemplateColumns: `minmax(50px, 70px) repeat(${room.gridSize}, minmax(55px, 70px))` }}>
-              <div className="w-full aspect-square" />
+            <div className="inline-grid gap-1 mx-auto" style={{ gridTemplateColumns: `minmax(70px, 90px) repeat(${room.gridSize}, minmax(60px, 80px))` }}>
+              <div />
               {room.cols.map((word, j) => (
-                <div key={`col-${j}`} className="flex items-center justify-center p-1 bg-bg-card rounded-cell border border-border font-bold text-accent-light text-[0.65rem]">
-                  {word}
+                <div key={`col-${j}`} className="flex flex-col items-center justify-center p-1 bg-bg-card rounded-cell border border-border">
+                  <span className="text-accent-light font-bold text-[0.6rem]">{colLetters[j]}</span>
+                  <span className="text-text-secondary text-[0.5rem] font-medium leading-tight text-center">{word}</span>
                 </div>
               ))}
               {room.rows.map((rowWord, i) => (
                 <div key={`row-${i}`} className="contents">
-                  <div className="flex items-center justify-center p-1 bg-bg-card rounded-cell border border-border font-bold text-accent-light text-[0.65rem] aspect-square">
-                    {rowWord}
+                  <div className="flex items-center gap-1 justify-center p-1 bg-bg-card rounded-cell border border-border">
+                    <span className="text-accent-light font-bold text-[0.6rem]">{i + 1}</span>
+                    <span className="text-text-secondary text-[0.5rem] font-medium leading-tight">{rowWord}</span>
                   </div>
                   {room.cols.map((_, j) => {
                     const cell = room.grid[i][j];
                     return (
                       <div
                         key={`cell-${i}-${j}`}
-                        className="flex flex-col items-center justify-center p-1 bg-bg-cell rounded-cell border border-success/50 aspect-square"
+                        className="flex flex-col items-center justify-center p-1 bg-bg-cell rounded-cell border border-success/50"
                       >
                         {cell.clue && (
                           <span className="text-warning font-semibold text-[0.7rem]">{cell.clue}</span>
@@ -84,14 +93,14 @@ export default function GameOver({ room, playerId, onRestart, onBackToMenu }: Pr
               onClick={onRestart}
               className="w-full py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-cell transition-all hover:-translate-y-0.5 active:translate-y-0"
             >
-              Jogar Novamente
+              {t.playAgain}
             </button>
           )}
           <button
             onClick={onBackToMenu}
             className="w-full py-3 bg-transparent text-accent-light border-2 border-accent font-semibold rounded-cell hover:bg-accent/15 transition-all"
           >
-            Voltar ao Menu
+            {t.backToMenu}
           </button>
         </div>
       </div>

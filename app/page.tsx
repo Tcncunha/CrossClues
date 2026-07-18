@@ -33,6 +33,7 @@ export interface Room {
   state: 'waiting' | 'playing' | 'finished';
   difficulty: string;
   gridSize: number;
+  wordLanguage: string;
   rows: string[];
   cols: string[];
   grid: Cell[][];
@@ -44,10 +45,21 @@ export interface Room {
 }
 
 type Screen = 'welcome' | 'menu' | 'config' | 'lobby' | 'game' | 'gameover';
+export type Lang = 'en' | 'pt';
+
+const modalText = {
+  en: { wrong: 'Wrong!', wrongDetail: 'Clue discarded. Next player!', correct: 'Correct!', correctDetail: 'You got it! +1 point', wrongPos: 'Wrong position' },
+  pt: { wrong: 'Errou!', wrongDetail: 'Dica descartada. Proximo jogador!', correct: 'Correto!', correctDetail: 'Acertou! +1 ponto', wrongPos: 'Essa nao era a posicao correta' },
+};
+const errText = {
+  en: { enterName: 'Enter your name', codeDigits: 'Code must be 4 digits' },
+  pt: { enterName: 'Digite seu nome', codeDigits: 'Codigo deve ter 4 digitos' },
+};
 
 export default function GamePage() {
   const socketRef = useRef(getSocket());
   const [screen, setScreen] = useState<Screen>('welcome');
+  const [lang, setLang] = useState<Lang>('en');
   const [room, setRoom] = useState<Room | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [selectedClueCell, setSelectedClueCell] = useState<{ row: number; col: number; rowWord: string; colWord: string } | null>(null);
@@ -108,15 +120,17 @@ export default function GamePage() {
       });
     });
 
-    socket.on('wrong-guess', (data: { row: number; col: number; clueRow: number; clueCol: number; guessedBy: string; playerName: string }) => {
+    socket.on('wrong-guess', () => {
       setRoom(prev => {
-        if (!prev) return prev;
+        if (!prev || !prev.currentClue) return prev;
+        const { row, col } = prev.currentClue;
         const newGrid = prev.grid.map(r => r.map(c => ({ ...c })));
-        newGrid[data.clueRow][data.clueCol].clue = null;
-        newGrid[data.clueRow][data.clueCol].clueBy = null;
+        newGrid[row][col].clue = null;
+        newGrid[row][col].clueBy = null;
         return { ...prev, grid: newGrid, currentClue: null };
       });
-      setModal({ icon: '❌', title: 'Errou!', detail: 'Dica descartada. Proximo jogador!' });
+      const m = modalText[lang];
+      setModal({ icon: '❌', title: m.wrong, detail: m.wrongDetail });
       setTimeout(() => setModal(null), 1500);
     });
 
@@ -145,14 +159,14 @@ export default function GamePage() {
   }, []);
 
   const handleCreateRoom = (name: string) => {
-    if (!name) return showError('Digite seu nome');
+    if (!name) return showError(errText[lang].enterName);
     setPlayer({ id: socketRef.current.id, name, isHost: true, color: '#e74c3c' });
     setScreen('config');
   };
 
   const handleJoinRoom = (name: string, code: string) => {
-    if (!name) return showError('Digite seu nome');
-    if (!code || code.length !== 4) return showError('Codigo deve ter 4 digitos');
+    if (!name) return showError(errText[lang].enterName);
+    if (!code || code.length !== 4) return showError(errText[lang].codeDigits);
     socketRef.current.emit('join-room', { roomCode: code, playerName: name }, (res: any) => {
       if (res.success) {
         setRoom(res.room);
@@ -164,9 +178,9 @@ export default function GamePage() {
     });
   };
 
-  const handleConfirmCreate = (difficulty: string, gridSize: number) => {
+  const handleConfirmCreate = (difficulty: string, gridSize: number, wordLanguage: string) => {
     const name = player?.name || '';
-    socketRef.current.emit('create-room', { playerName: name, difficulty, gridSize }, (res: any) => {
+    socketRef.current.emit('create-room', { playerName: name, difficulty, gridSize, wordLanguage }, (res: any) => {
       if (res.success) {
         setRoom(res.room);
         setPlayer(res.player);
@@ -219,10 +233,12 @@ export default function GamePage() {
     socketRef.current.emit('guess-cell', { row, col }, (res: any) => {
       if (!res.success) return showError(res.error);
       if (res.correct) {
-        setModal({ icon: '✅', title: 'Correto!', detail: 'Acertou! +1 ponto' });
+        const m = modalText[lang];
+        setModal({ icon: '✅', title: m.correct, detail: m.correctDetail });
         setTimeout(() => setModal(null), 1500);
       } else {
-        setModal({ icon: '❌', title: 'Errou!', detail: 'Essa nao era a posicao correta' });
+        const m = modalText[lang];
+        setModal({ icon: '❌', title: m.wrong, detail: m.wrongPos });
         setTimeout(() => setModal(null), 1500);
       }
     });
@@ -248,17 +264,18 @@ export default function GamePage() {
     <div className="min-h-screen flex items-center justify-center p-5">
       <div className="w-full max-w-2xl animate-fade-in">
         {screen === 'welcome' && (
-          <WelcomePage onPlay={() => setScreen('menu')} />
+          <WelcomePage onPlay={() => setScreen('menu')} lang={lang} onLangChange={setLang} />
         )}
         {screen === 'menu' && (
           <GameMenu
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
             error={error}
+            lang={lang}
           />
         )}
         {screen === 'config' && (
-          <GameConfig onConfirm={handleConfirmCreate} />
+          <GameConfig onConfirm={handleConfirmCreate} lang={lang} />
         )}
         {screen === 'lobby' && room && player && (
           <GameLobby
@@ -268,6 +285,7 @@ export default function GamePage() {
             onStartGame={handleStartGame}
             onCopyCode={handleCopyCode}
             copied={copied}
+            lang={lang}
           />
         )}
         {screen === 'game' && room && (
@@ -280,6 +298,7 @@ export default function GamePage() {
             onGuessCell={handleGuessCell}
             isClueGiver={isClueGiver()}
             getMyIndex={getMyIndex}
+            lang={lang}
           />
         )}
         {screen === 'gameover' && room && (
@@ -288,6 +307,7 @@ export default function GamePage() {
             playerId={socketRef.current.id}
             onRestart={handleRestart}
             onBackToMenu={handleBackToMenu}
+            lang={lang}
           />
         )}
       </div>
