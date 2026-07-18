@@ -8,6 +8,7 @@ import GameLobby from '@/components/GameLobby';
 import GameBoard from '@/components/GameBoard';
 import GameOver from '@/components/GameOver';
 import ResultModal from '@/components/ResultModal';
+import WelcomePage from '@/components/WelcomePage';
 
 export interface Player {
   id: string;
@@ -42,11 +43,11 @@ export interface Room {
   currentClue: { row: number; col: number; rowWord: string; colWord: string; clue?: string; clueBy?: string } | null;
 }
 
-type Screen = 'menu' | 'config' | 'lobby' | 'game' | 'gameover';
+type Screen = 'welcome' | 'menu' | 'config' | 'lobby' | 'game' | 'gameover';
 
 export default function GamePage() {
   const socketRef = useRef(getSocket());
-  const [screen, setScreen] = useState<Screen>('menu');
+  const [screen, setScreen] = useState<Screen>('welcome');
   const [room, setRoom] = useState<Room | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [selectedClueCell, setSelectedClueCell] = useState<{ row: number; col: number; rowWord: string; colWord: string } | null>(null);
@@ -246,6 +247,9 @@ export default function GamePage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-5">
       <div className="w-full max-w-2xl animate-fade-in">
+        {screen === 'welcome' && (
+          <WelcomePage onPlay={() => setScreen('menu')} />
+        )}
         {screen === 'menu' && (
           <GameMenu
             onCreateRoom={handleCreateRoom}

@@ -3,8 +3,6 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const next = require('next');
-const path = require('path');
-const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -16,53 +14,32 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-const WORDS_FILE = path.join(__dirname, 'words.json');
-
-function loadWordsLocal() {
-  try {
-    const data = fs.readFileSync(WORDS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Erro ao carregar words.json:', err.message);
-    return { facil: [], medio: [], dificil: [] };
-  }
-}
-
-let WORD_LISTS = loadWordsLocal();
+let WORD_LISTS = { facil: [], medio: [], dificil: [] };
 
 async function loadWordsFromSupabase() {
-  try {
-    const { data: newSchemaData, error: newSchemaErr } = await supabase
-      .from('words')
-      .select('word, length, language')
-      .eq('is_active', true);
+  const { data, error } = await supabase
+    .from('words')
+    .select('word, Level')
+    .eq('language', 'EN')
+    .eq('is_active', true);
 
-    if (!newSchemaErr && newSchemaData && newSchemaData.length > 0) {
-      const enWords = newSchemaData
-        .filter(row => row.language === 'EN')
-        .map(row => row.word);
-      console.log('Palavras EN carregadas do Supabase (novo schema):', enWords.length);
-      return { facil: enWords, medio: enWords, dificil: enWords };
-    }
+  if (error) throw error;
 
-    const { data, error } = await supabase
-      .from('words')
-      .select('word, difficulty');
-    if (error) throw error;
-    const result = { facil: [], medio: [], dificil: [] };
-    data.forEach(row => {
-      if (result[row.difficulty]) result[row.difficulty].push(row.word);
-    });
-    console.log('Palavras carregadas do Supabase (schema antigo):', {
-      facil: result.facil.length,
-      medio: result.medio.length,
-      dificil: result.dificil.length,
-    });
-    return result;
-  } catch (err) {
-    console.error('Erro ao buscar do Supabase, usando fallback local:', err.message);
-    return loadWordsLocal();
-  }
+  const result = { facil: [], medio: [], dificil: [] };
+  data.forEach(row => {
+    const level = row.Level;
+    const word = row.word;
+    if (level === 1) result.facil.push(word);
+    else if (level === 2) result.medio.push(word);
+    else if (level === 3) result.dificil.push(word);
+  });
+
+  console.log('Palavras EN carregadas do Supabase:', {
+    facil: result.facil.length,
+    medio: result.medio.length,
+    dificil: result.dificil.length,
+  });
+  return result;
 }
 
 async function initWords() {
@@ -204,13 +181,11 @@ app.prepare().then(() => {
   server.use(express.json());
 
   server.post('/api/words', async (req, res) => {
-    const { word, difficulty } = req.body;
-    if (!word || !difficulty) return res.status(400).json({ error: 'word e difficulty sao obrigatorios' });
-    if (!['facil', 'medio', 'dificil'].includes(difficulty)) return res.status(400).json({ error: 'difficulty deve ser: facil, medio ou dificil' });
+    const { word, Level, language } = req.body;
+    if (!word) return res.status(400).json({ error: 'word is required' });
     try {
-      const { data, error } = await supabase.from('words').insert([{ word, difficulty }]).select();
+      const { data, error } = await supabase.from('words').insert([{ word, Level: Level || 1, language: language || 'EN', is_active: true }]).select();
       if (error) throw error;
-      WORD_LISTS[difficulty].push(word);
       res.json({ success: true, word: data[0] });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -232,8 +207,8 @@ app.prepare().then(() => {
     try {
       const { data: words, error: wordsErr } = await supabase.from('words').select('*').limit(20);
       if (wordsErr) throw wordsErr;
-      const counts = { facil: 0, medio: 0, dificil: 0 };
-      words.forEach(r => { if (counts[r.difficulty] !== undefined) counts[r.difficulty]++; });
+      const counts = { Level1: 0, Level2: 0, Level3: 0 };
+      words.forEach(r => { if (r.Level) counts['Level' + r.Level]++; });
       res.json({ success: true, tables: { words: { data: words, counts } } });
     } catch (err) {
       res.json({ success: false, error: err.message });
@@ -391,10 +366,10 @@ app.prepare().then(() => {
       console.log(`=================================`);
     });
   }).catch(err => {
-    console.error('Erro ao inicializar palavras:', err);
+    console.error('Erro ao inicializar palavras:', err.message);
     httpServer.listen(PORT, () => {
       console.log(`=================================`);
-      console.log(`  Entre Linhas Online (fallback local)`);
+      console.log(`  Entre Linhas Online (sem palavras)`);
       console.log(`  Rodando em http://localhost:${PORT}`);
       console.log(`=================================`);
     });

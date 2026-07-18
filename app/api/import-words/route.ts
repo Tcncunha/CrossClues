@@ -10,7 +10,6 @@ const BATCH_SIZE = 50;
 
 interface WordEntry {
   word: string;
-  length: number;
   language: string;
   is_active: boolean;
 }
@@ -56,7 +55,6 @@ export async function POST(request: Request) {
 
     const entries: WordEntry[] = rawWords.map(word => ({
       word,
-      length: word.length,
       language: 'EN',
       is_active: true,
     }));
@@ -108,14 +106,8 @@ export async function GET() {
 
     if (error) throw error;
 
-    const byLength: Record<number, number> = {};
-    data?.forEach(w => {
-      byLength[w.length] = (byLength[w.length] || 0) + 1;
-    });
-
     return NextResponse.json({
       total: count,
-      byLength,
       sample: data?.slice(0, 10).map(w => w.word) || [],
     });
   } catch (err: any) {

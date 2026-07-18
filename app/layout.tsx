@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Entre Linhas - Jogo Online',
-  description: 'Jogo de Deducao de Palavras Online',
+  title: 'CrossLinescls | CrossLines - Word Deduction Game',
+  description: 'A real-time multiplayer word deduction game | Jogo de deducao de palavras online',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
