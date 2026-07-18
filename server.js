@@ -249,7 +249,6 @@ app.prepare().then(() => {
     socket.on('start-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
-      if (room.players.length < 2) return callback({ success: false, error: 'Minimo 2 jogadores' });
       await ensureWords();
       const { rows, cols, grid } = createGrid(WORD_LISTS[room.difficulty] || WORD_LISTS.medio, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;

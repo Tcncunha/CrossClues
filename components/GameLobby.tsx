@@ -51,8 +51,7 @@ export default function GameLobby({ room, isHost, onStartGame, onCopyCode, copie
           {isHost ? (
             <button
               onClick={onStartGame}
-              disabled={room.players.length < 2}
-              className="w-full py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-cell transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-cell transition-all hover:-translate-y-0.5 active:translate-y-0"
             >
               Iniciar Partida
             </button>
