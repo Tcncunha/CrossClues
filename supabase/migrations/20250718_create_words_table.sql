@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS "CrossLinesGameDB"."words"  (
 );
 
 -- Índice para consultas por idioma, tamanho e status
-CREATE INDEX idx_word_lookup ON words (language, length, is_active);
+CREATE INDEX idx_word_lookup ON "CrossLinesGameDB".words (language, length, is_active);
 
 -- =============================================
 -- Insert de 100 palavras em inglês
