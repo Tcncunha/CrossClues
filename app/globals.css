@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-bg-primary text-text-primary font-sans min-h-screen overflow-x-hidden;
+  }
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: #fdcb6e; box-shadow: 0 0 0 0 rgba(253, 203, 110, 0.4); }
+  50% { border-color: #fdcb6e; box-shadow: 0 0 0 6px rgba(253, 203, 110, 0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-pulse-border {
+  animation: pulse-border 1.5s infinite;
+}
+
+.animate-shake {
+  animation: shake 0.5s;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
