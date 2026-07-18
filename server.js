@@ -32,6 +32,19 @@ let WORD_LISTS = loadWordsLocal();
 
 async function loadWordsFromSupabase() {
   try {
+    const { data: newSchemaData, error: newSchemaErr } = await supabase
+      .from('words')
+      .select('word, length, language')
+      .eq('is_active', true);
+
+    if (!newSchemaErr && newSchemaData && newSchemaData.length > 0) {
+      const enWords = newSchemaData
+        .filter(row => row.language === 'EN')
+        .map(row => row.word);
+      console.log('Palavras EN carregadas do Supabase (novo schema):', enWords.length);
+      return { facil: enWords, medio: enWords, dificil: enWords };
+    }
+
     const { data, error } = await supabase
       .from('words')
       .select('word, difficulty');
@@ -40,7 +53,7 @@ async function loadWordsFromSupabase() {
     data.forEach(row => {
       if (result[row.difficulty]) result[row.difficulty].push(row.word);
     });
-    console.log('Palavras carregadas do Supabase:', {
+    console.log('Palavras carregadas do Supabase (schema antigo):', {
       facil: result.facil.length,
       medio: result.medio.length,
       dificil: result.dificil.length,
