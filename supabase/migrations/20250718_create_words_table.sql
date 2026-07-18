@@ -10,6 +10,3 @@ CREATE TABLE IF NOT EXISTS "CrossLinesGameDB"."words"  (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW()
 );
-
--- Índice para consultas por idioma, tamanho e status
-CREATE INDEX idx_word_lookup ON "CrossLinesGameDB".words (language, is_active);
