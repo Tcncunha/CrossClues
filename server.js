@@ -15,6 +15,7 @@ const supabase = createClient(
 );
 
 let WORD_LISTS = { facil: [], medio: [], dificil: [] };
+let wordsLoaded = false;
 
 async function loadWordsFromSupabase() {
   const { data, error } = await supabase
@@ -34,16 +35,15 @@ async function loadWordsFromSupabase() {
     else if (level === 3) result.dificil.push(word);
   });
 
-  console.log('Palavras EN carregadas do Supabase:', {
-    facil: result.facil.length,
-    medio: result.medio.length,
-    dificil: result.dificil.length,
-  });
   return result;
 }
 
-async function initWords() {
-  WORD_LISTS = await loadWordsFromSupabase();
+async function ensureWords() {
+  if (!wordsLoaded) {
+    WORD_LISTS = await loadWordsFromSupabase();
+    wordsLoaded = true;
+  }
+  return WORD_LISTS;
 }
 
 const rooms = new Map();
@@ -162,6 +162,7 @@ app.prepare().then(() => {
   // REST API routes
   server.get('/api/reload-words', async (req, res) => {
     WORD_LISTS = await loadWordsFromSupabase();
+    wordsLoaded = true;
     const counts = {
       facil: WORD_LISTS.facil?.length || 0,
       medio: WORD_LISTS.medio?.length || 0,
@@ -219,7 +220,8 @@ app.prepare().then(() => {
   io.on('connection', (socket) => {
     console.log(`Jogador conectado: ${socket.id}`);
 
-    socket.on('create-room', ({ playerName, difficulty, gridSize }, callback) => {
+    socket.on('create-room', async ({ playerName, difficulty, gridSize }, callback) => {
+      await ensureWords();
       const room = createRoom(playerName, difficulty || 'medio', gridSize || 4);
       const player = { id: socket.id, name: playerName, isHost: true, color: getPlayerColor(0) };
       room.host = socket.id;
@@ -244,10 +246,11 @@ app.prepare().then(() => {
       io.to(room.code).emit('room-updated', getRoomState(room));
     });
 
-    socket.on('start-game', (callback) => {
+    socket.on('start-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
       if (room.players.length < 2) return callback({ success: false, error: 'Minimo 2 jogadores' });
+      await ensureWords();
       const { rows, cols, grid } = createGrid(WORD_LISTS[room.difficulty] || WORD_LISTS.medio, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
@@ -318,9 +321,10 @@ app.prepare().then(() => {
       }
     });
 
-    socket.on('restart-game', (callback) => {
+    socket.on('restart-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
+      await ensureWords();
       const { rows, cols, grid } = createGrid(WORD_LISTS[room.difficulty] || WORD_LISTS.medio, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
@@ -358,20 +362,10 @@ app.prepare().then(() => {
 
   const PORT = process.env.PORT || 3000;
 
-  initWords().then(() => {
-    httpServer.listen(PORT, () => {
-      console.log(`=================================`);
-      console.log(`  Entre Linhas Online (Next.js)`);
-      console.log(`  Rodando em http://localhost:${PORT}`);
-      console.log(`=================================`);
-    });
-  }).catch(err => {
-    console.error('Erro ao inicializar palavras:', err.message);
-    httpServer.listen(PORT, () => {
-      console.log(`=================================`);
-      console.log(`  Entre Linhas Online (sem palavras)`);
-      console.log(`  Rodando em http://localhost:${PORT}`);
-      console.log(`=================================`);
-    });
+  httpServer.listen(PORT, () => {
+    console.log(`=================================`);
+    console.log(`  Entre Linhas Online (Next.js)`);
+    console.log(`  Rodando em http://localhost:${PORT}`);
+    console.log(`=================================`);
   });
 });

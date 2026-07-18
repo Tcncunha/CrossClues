@@ -42,7 +42,7 @@ const content = {
     objective: 'Objetivo',
     objectiveText: 'Revele todas as celulas da grade acertando a qual intersecao cada dica se refere.',
     steps: [
-      { title: 'O Dador de Dicas', text: 'Um jogador e escolhido como Dador de Dicas a cada turno. Ele ve duas palavras cruzadas em cada celula vazia e deve fornecer uma dica de uma palavra que conecta ambas.' },
+      { title: 'O Dono da Dicas', text: 'Um jogador e escolhido como Dador de Dicas a cada turno. Ele ve duas palavras cruzadas em cada celula vazia e deve fornecer uma dica de uma palavra que conecta ambas.' },
       { title: 'A Dica', text: 'O Dador de Dicas escolhe uma celula vazia e digita uma palavra que sugere tanto a palavra da linha quanto a palavra da coluna que se cruzam naquela celula.' },
       { title: 'O Palpite', text: 'Os outros jogadores veem a dica e devem descobrir a qual celula da grade ela se refere. Eles clicam na celula que acham que corresponde.' },
       { title: 'Pontuacao', text: 'Acertou: +1 ponto. Errou: a dica e descartada e o turno passa para o proximo jogador.' },
@@ -57,7 +57,7 @@ const content = {
     playersTitle: 'Jogadores',
     playersDesc: '2 a 6 jogadores. Um da dicas enquanto os outros tentam acertar. Os papeis revezam a cada turno.',
     rolesTitle: 'Papeis',
-    rolesDesc: 'Dador de Dicas: fornece dicas de uma palavra. Adivinhadores: tentam identificar a celula correta. Os papeis revezam a cada turno.',
+    rolesDesc: 'Dono de Dicas: fornece dicas de uma palavra. Adivinhadores: tentam identificar a celula correta. Os papeis revezam a cada turno.',
   },
 };
 
