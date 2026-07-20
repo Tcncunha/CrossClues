@@ -1,38 +1,102 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-primary: #0f0f23;
-  --color-bg-secondary: #1a1a3e;
-  --color-bg-card: #1e1e42;
-  --color-bg-cell: #2a2a5a;
-  --color-bg-cell-hover: #3a3a7a;
-  --color-accent: #6c5ce7;
-  --color-accent-hover: #7c6cf7;
-  --color-accent-light: #a29bfe;
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #b2b2d8;
-  --color-text-muted: #6c6c9e;
-  --color-success: #00b894;
-  --color-error: #e74c3c;
-  --color-warning: #fdcb6e;
-  --color-border: #3a3a6a;
-  --radius-card: 12px;
-  --radius-cell: 8px;
+  /* Table surfaces */
+  --color-bg-primary: #161310;
+  --color-bg-secondary: #1d1812;
+  --color-bg-card: #241e17;
+  --color-bg-cell: #2f2718;
+  --color-bg-cell-hover: #3d3220;
+
+  /* Pine + brass identity */
+  --color-accent: #4a6b4e;
+  --color-accent-hover: #587d5c;
+  --color-accent-light: #d6a94e;
+
+  /* Text on the table (dark surfaces) */
+  --color-text-primary: #f3ecdd;
+  --color-text-secondary: #c9bba0;
+  --color-text-muted: #8a7c63;
+
+  /* Status ink */
+  --color-success: #5c8b57;
+  --color-error: #b0362b;
+  --color-warning: #c98a3b;
+  --color-border: #3b3020;
+
+  /* Cardstock (paper elements: drawn cards, revealed cells) */
+  --color-paper: #ede0c4;
+  --color-paper-dark: #ddcba3;
+  --color-ink: #2b2419;
+  --color-ink-light: #5a4b36;
+
+  --radius-card: 16px;
+  --radius-cell: 10px;
+
+  --font-display: var(--font-bricolage), 'Georgia', serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-mono-plex), 'Courier New', monospace;
 }
 
 @layer base {
+  html {
+    color-scheme: dark;
+  }
+
   body {
     background-color: var(--color-bg-primary);
+    background-image:
+      radial-gradient(ellipse 120% 80% at 50% -10%, rgba(74, 107, 78, 0.15), transparent 60%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
     color: var(--color-text-primary);
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: var(--font-body);
     min-height: 100vh;
     overflow-x: hidden;
+  }
+
+  ::selection {
+    background: var(--color-accent-light);
+    color: var(--color-ink);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-accent-light);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .font-mono-label {
+    font-family: var(--font-mono);
+  }
+
+  /* Cardstock texture for "paper" surfaces (drawn card, revealed cells) */
+  .paper-grain {
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(43,36,25,0.04) 0%, transparent 45%),
+      radial-gradient(circle at 80% 70%, rgba(43,36,25,0.05) 0%, transparent 50%);
+  }
+
+  .grain-overlay {
+    position: relative;
+  }
+  .grain-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    border-radius: inherit;
+    mix-blend-mode: overlay;
   }
 }
 
 @keyframes pulse-border {
-  0%, 100% { border-color: #fdcb6e; box-shadow: 0 0 0 0 rgba(253, 203, 110, 0.4); }
-  50% { border-color: #fdcb6e; box-shadow: 0 0 0 6px rgba(253, 203, 110, 0); }
+  0%, 100% { border-color: var(--color-warning); box-shadow: 0 0 0 0 rgba(201, 138, 59, 0.35); }
+  50% { border-color: var(--color-warning); box-shadow: 0 0 0 7px rgba(201, 138, 59, 0); }
 }
 
 @keyframes shake {
@@ -48,14 +112,50 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-pulse-border {
-  animation: pulse-border 1.5s infinite;
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-shake {
-  animation: shake 0.5s;
+/* Signature: card draw flip */
+@keyframes card-flip {
+  0% { transform: perspective(900px) rotateY(-100deg) scale(0.92); opacity: 0; }
+  55% { transform: perspective(900px) rotateY(8deg) scale(1.015); opacity: 1; }
+  100% { transform: perspective(900px) rotateY(0deg) scale(1); opacity: 1; }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
+/* Signature: rubber-stamp slam for result modal */
+@keyframes stamp-drop {
+  0% { transform: scale(2.4) rotate(-10deg); opacity: 0; }
+  55% { transform: scale(0.94) rotate(-7deg); opacity: 1; }
+  75% { transform: scale(1.06) rotate(-8deg); }
+  100% { transform: scale(1) rotate(-6deg); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-pulse-border { animation: pulse-border 1.5s infinite; }
+.animate-shake { animation: shake 0.5s; }
+.animate-fade-in { animation: fade-in 0.3s ease-out; }
+.animate-rise-in { animation: rise-in 0.35s cubic-bezier(.2,.7,.3,1) both; }
+.animate-card-flip { animation: card-flip 0.65s cubic-bezier(.2,.75,.3,1) both; transform-style: preserve-3d; }
+.animate-stamp { animation: stamp-drop 0.5s cubic-bezier(.3,1.4,.4,1) both; }
+
+.text-shimmer {
+  background: linear-gradient(90deg, var(--color-accent-light) 0%, var(--color-paper) 50%, var(--color-accent-light) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-border, .animate-shake, .animate-fade-in, .animate-rise-in,
+  .animate-card-flip, .animate-stamp, .text-shimmer {
+    animation: none !important;
+  }
 }

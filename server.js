@@ -309,7 +309,9 @@ app.prepare().then(() => {
       card.rowWord = cell.rowWord;
       card.colWord = cell.colWord;
       room.drawnCard = card;
-      io.to(room.code).emit('card-drawn', { cardLabel: card.label, cardRow: card.row, cardCol: card.col, rowWord: card.rowWord, colWord: card.colWord, drawnBy: currentPlayer.name, deckCount: room.cardDeck.length });
+      console.log(`[DEBUG] Card drawn by ${currentPlayer.name}: ${card.label} (${card.rowWord} x ${card.colWord}), deck: ${room.cardDeck.length}`);
+      socket.emit('card-drawn', { cardLabel: card.label, cardRow: card.row, cardCol: card.col, rowWord: card.rowWord, colWord: card.colWord, drawnBy: currentPlayer.name, deckCount: room.cardDeck.length });
+      io.to(room.code).emit('turn-updated', { currentTurn: room.currentTurn, currentPlayer: currentPlayer.name });
       callback({ success: true, card });
     });
 
