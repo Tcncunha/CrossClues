@@ -154,10 +154,13 @@ export default function GamePage() {
     });
 
     socket.on('card-drawn', (data: { cardLabel: string; cardRow: number; cardCol: number; rowWord: string; colWord: string; drawnBy: string; deckCount: number }) => {
+      console.log('[DEBUG] card-drawn received (private):', data);
       setRoom(prev => prev ? { ...prev, cardDeckCount: data.deckCount } : prev);
-      if (data.drawnBy === room?.players.find(p => p.id === socketRef.current.id)?.name) {
-        setDrawnCard({ row: data.cardRow, col: data.cardCol, label: data.cardLabel, rowWord: data.rowWord, colWord: data.colWord });
-      }
+      setDrawnCard({ row: data.cardRow, col: data.cardCol, label: data.cardLabel, rowWord: data.rowWord, colWord: data.colWord });
+    });
+
+    socket.on('turn-updated', (data: { currentTurn: number; currentPlayer: string }) => {
+      setRoom(prev => prev ? { ...prev, currentTurn: data.currentTurn } : prev);
     });
 
     socket.on('turn-passed', (data: { passedBy: string; currentTurn: number; currentPlayer: string }) => {
@@ -254,7 +257,9 @@ export default function GamePage() {
   };
 
   const handleDrawCard = () => {
+    console.log('[DEBUG] Drawing card...');
     socketRef.current.emit('draw-card', (res: any) => {
+      console.log('[DEBUG] draw-card response:', res);
       if (!res.success) {
         showError(res.error);
       }
@@ -280,7 +285,7 @@ export default function GamePage() {
   const handleGuessCell = (row: number, col: number) => {
     if (!room || isClueGiver() || !room.currentClue) return;
     const cellData = room.grid[row][col];
-    if (cellData.revealed || !cellData.clue) return;
+    if (cellData.revealed) return;
     socketRef.current.emit('guess-cell', { row, col }, (res: any) => {
       if (!res.success) return showError(res.error);
       if (res.correct) {
@@ -324,7 +329,7 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-5">
-      <div className="w-full max-w-2xl animate-fade-in">
+      <div className={`w-full animate-fade-in ${screen === 'game' ? 'max-w-2xl h-[100dvh] flex flex-col' : 'max-w-2xl'}`}>
         {screen === 'welcome' && (
           <WelcomePage onPlay={() => setScreen('menu')} lang={lang} onLangChange={setLang} />
         )}
@@ -366,6 +371,7 @@ export default function GamePage() {
             isClueGiver={isClueGiver()}
             getMyIndex={getMyIndex}
             lang={lang}
+            error={error}
           />
         )}
         {screen === 'gameover' && room && (
