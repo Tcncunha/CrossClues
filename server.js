@@ -81,6 +81,25 @@ function createGrid(words, size) {
   return { rows, cols, grid };
 }
 
+function createCardDeck(grid, gridSize) {
+  const cards = [];
+  const colLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (let i = 0; i < gridSize; i++) {
+    for (let j = 0; j < gridSize; j++) {
+      if (!grid[i][j].revealed) {
+        cards.push({
+          row: i,
+          col: j,
+          label: `${colLetters[j]}${i + 1}`,
+          rowWord: grid[i][j].rowWord,
+          colWord: grid[i][j].colWord,
+        });
+      }
+    }
+  }
+  return shuffleArray(cards);
+}
+
 function createRoom(hostName, difficulty, gridSize, wordLanguage) {
   const code = generateRoomCode();
   const room = {
@@ -99,6 +118,9 @@ function createRoom(hostName, difficulty, gridSize, wordLanguage) {
     cluesGiven: 0,
     maxClues: gridSize * gridSize,
     currentClue: null,
+    cardDeck: [],
+    discardPile: [],
+    drawnCard: null,
   };
   rooms.set(code, room);
   return room;
@@ -136,6 +158,9 @@ function getRoomState(room) {
     cluesGiven: room.cluesGiven,
     maxClues: room.maxClues,
     currentClue: room.currentClue,
+    cardDeckCount: room.cardDeck.length,
+    discardPileCount: room.discardPile.length,
+    drawnCard: room.drawnCard,
   };
 }
 
@@ -231,6 +256,21 @@ app.prepare().then(() => {
       io.to(room.code).emit('room-updated', getRoomState(room));
     });
 
+    socket.on('add-test-player', (callback) => {
+      const room = rooms.get(socket.roomCode);
+      if (!room) return callback({ success: false, error: 'Nao esta em uma sala' });
+      if (room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode adicionar jogadores' });
+      if (room.players.length >= 6) return callback({ success: false, error: 'Sala cheia (max. 6 jogadores)' });
+      const botNames = ['Bot Alpha', 'Bot Beta', 'Bot Gamma', 'Bot Delta', 'Bot Omega'];
+      const botName = botNames[room.players.length - 1] || `Bot ${room.players.length}`;
+      const botId = `bot_${Date.now()}_${room.players.length}`;
+      const player = { id: botId, name: botName, isHost: false, color: getPlayerColor(room.players.length) };
+      room.players.push(player);
+      room.scores[botId] = 0;
+      callback({ success: true, room: getRoomState(room) });
+      io.to(room.code).emit('room-updated', getRoomState(room));
+    });
+
     socket.on('start-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
@@ -240,8 +280,50 @@ app.prepare().then(() => {
       const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
+      room.cardDeck = createCardDeck(grid, room.gridSize);
+      room.discardPile = [];
+      room.drawnCard = null;
       Object.keys(room.scores).forEach(k => { room.scores[k] = 0; });
       io.to(room.code).emit('game-started', getRoomState(room));
+      callback({ success: true });
+    });
+
+    socket.on('draw-card', (callback) => {
+      const room = rooms.get(socket.roomCode);
+      if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
+      const currentPlayer = room.players[room.currentTurn];
+      if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez' });
+      if (room.drawnCard) return callback({ success: false, error: 'Voce ja comprou uma carta' });
+      if (room.currentClue) return callback({ success: false, error: 'Ha uma dica ativa' });
+      if (room.cardDeck.length === 0) {
+        if (room.discardPile.length === 0) return callback({ success: false, error: 'Nenhuma carta restante' });
+        room.cardDeck = shuffleArray(room.discardPile);
+        room.discardPile = [];
+      }
+      const card = room.cardDeck.pop();
+      const cell = room.grid[card.row][card.col];
+      if (cell.revealed) {
+        room.discardPile.push(card);
+        return callback({ success: false, error: 'Celula ja revelada, comprou outra carta' });
+      }
+      card.rowWord = cell.rowWord;
+      card.colWord = cell.colWord;
+      room.drawnCard = card;
+      io.to(room.code).emit('card-drawn', { cardLabel: card.label, cardRow: card.row, cardCol: card.col, rowWord: card.rowWord, colWord: card.colWord, drawnBy: currentPlayer.name, deckCount: room.cardDeck.length });
+      callback({ success: true, card });
+    });
+
+    socket.on('pass-turn', (callback) => {
+      const room = rooms.get(socket.roomCode);
+      if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
+      const currentPlayer = room.players[room.currentTurn];
+      if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez' });
+      if (!room.drawnCard) return callback({ success: false, error: 'Voce nao comprou uma carta' });
+      room.discardPile.push(room.drawnCard);
+      room.drawnCard = null;
+      room.currentClue = null;
+      room.currentTurn = (room.currentTurn + 1) % room.players.length;
+      io.to(room.code).emit('turn-passed', { passedBy: currentPlayer.name, currentTurn: room.currentTurn, currentPlayer: room.players[room.currentTurn]?.name });
       callback({ success: true });
     });
 
@@ -250,6 +332,8 @@ app.prepare().then(() => {
       if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
       const currentPlayer = room.players[room.currentTurn];
       if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez de dar dica' });
+      if (!room.drawnCard) return callback({ success: false, error: 'Voce precisa comprar uma carta primeiro' });
+      if (row !== room.drawnCard.row || col !== room.drawnCard.col) return callback({ success: false, error: 'So pode usar a celula da carta comprada' });
       const cell = room.grid[row][col];
       if (cell.revealed) return callback({ success: false, error: 'Celula ja foi revelada' });
       room.currentClue = { row, col, rowWord: cell.rowWord, colWord: cell.colWord };
@@ -267,6 +351,7 @@ app.prepare().then(() => {
       room.grid[row][col].clue = clue;
       room.grid[row][col].clueBy = currentPlayer.name;
       room.cluesGiven++;
+      room.drawnCard = null;
       io.to(room.code).emit('clue-given', { row, col, clue, clueBy: currentPlayer.name });
       callback({ success: true });
     });
@@ -285,6 +370,7 @@ app.prepare().then(() => {
         cell.revealedBy = socket.id;
         room.scores[socket.id] = (room.scores[socket.id] || 0) + 1;
         room.currentClue = null;
+        room.drawnCard = null;
         io.to(room.code).emit('cell-revealed', { row, col, revealedBy: socket.id, playerName: room.players.find(p => p.id === socket.id)?.name, rowWord: cell.rowWord, colWord: cell.colWord, score: room.scores[socket.id] });
         if (checkAllRevealed(room)) {
           room.state = 'finished';
@@ -300,6 +386,7 @@ app.prepare().then(() => {
         room.grid[clueRow][clueCol].clue = null;
         room.grid[clueRow][clueCol].clueBy = null;
         room.currentClue = null;
+        room.drawnCard = null;
         io.to(room.code).emit('wrong-guess', { row, col, clueRow, clueCol, guessedBy: socket.id, playerName: room.players.find(p => p.id === socket.id)?.name });
         room.currentTurn = (room.currentTurn + 1) % room.players.length;
         io.to(room.code).emit('turn-changed', { currentTurn: room.currentTurn, currentPlayer: room.players[room.currentTurn]?.name });
@@ -315,8 +402,36 @@ app.prepare().then(() => {
       const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
+      room.cardDeck = createCardDeck(grid, room.gridSize);
+      room.discardPile = [];
+      room.drawnCard = null;
       Object.keys(room.scores).forEach(k => { room.scores[k] = 0; });
       io.to(room.code).emit('game-restarted', getRoomState(room));
+      callback({ success: true });
+    });
+
+    socket.on('leave-room', (callback) => {
+      const roomCode = socket.roomCode;
+      if (!roomCode) return callback({ success: false, error: 'Nao esta em uma sala' });
+      const room = rooms.get(roomCode);
+      if (!room) return callback({ success: false, error: 'Sala nao encontrada' });
+      const leavingPlayer = room.players.find(p => p.id === socket.id);
+      room.players = room.players.filter(p => p.id !== socket.id);
+      delete room.scores[socket.id];
+      socket.leave(roomCode);
+      socket.roomCode = null;
+      if (room.players.length === 0) {
+        rooms.delete(roomCode);
+      } else {
+        if (room.host === socket.id) {
+          room.host = room.players[0].id;
+          room.players[0].isHost = true;
+        }
+        if (room.state === 'playing' && room.currentTurn >= room.players.length) {
+          room.currentTurn = 0;
+        }
+        io.to(roomCode).emit('player-left', { playerName: leavingPlayer?.name, room: getRoomState(room) });
+      }
       callback({ success: true });
     });
 

@@ -10,6 +10,10 @@ interface Props {
   onSelectCell: (row: number, col: number) => void;
   onSubmitClue: (clue: string) => void;
   onGuessCell: (row: number, col: number) => void;
+  onDrawCard: () => void;
+  onPassTurn: () => void;
+  onLeaveRoom: () => void;
+  drawnCard: { row: number; col: number; label: string; rowWord: string; colWord: string } | null;
   isClueGiver: boolean;
   getMyIndex: () => number;
   lang: 'en' | 'pt';
@@ -29,6 +33,12 @@ const ui = {
     clueReceived: 'Clue received',
     clueFrom: 'Clue from:',
     clickCell: 'Click the cell you think is the answer',
+    drawCard: 'Draw',
+    passTurn: 'Pass',
+    exit: 'Exit',
+    cardAssigned: 'Your card:',
+    clickCellAssigned: 'Click the highlighted cell to give your clue',
+    deckRemaining: 'Cards left:',
   },
   pt: {
     room: 'Sala',
@@ -43,10 +53,16 @@ const ui = {
     clueReceived: 'Dica recebida',
     clueFrom: 'Dica de:',
     clickCell: 'Clique na celula que voce acredita ser a resposta',
+    drawCard: 'Comprar',
+    passTurn: 'Passar',
+    exit: 'Sair',
+    cardAssigned: 'Sua carta:',
+    clickCellAssigned: 'Clique na celula destacada para dar sua dica',
+    deckRemaining: 'Cartas restantes:',
   },
 };
 
-export default function GameBoard({ room, playerId, selectedClueCell, onSelectCell, onSubmitClue, onGuessCell, isClueGiver, getMyIndex, lang }: Props) {
+export default function GameBoard({ room, playerId, selectedClueCell, onSelectCell, onSubmitClue, onGuessCell, onDrawCard, onPassTurn, onLeaveRoom, drawnCard, isClueGiver, getMyIndex, lang }: Props) {
   const [clueInput, setClueInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const t = ui[lang];
@@ -54,7 +70,9 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
   const currentPlayer = room.players[room.currentTurn];
   const isMyTurn = currentPlayer?.id === playerId;
   const hasActiveClue = room.currentClue != null;
-  const waitingForSelection = isClueGiver && !hasActiveClue && !selectedClueCell;
+
+  const waitingForDraw = isClueGiver && !hasActiveClue && !drawnCard && !selectedClueCell;
+  const waitingForCellClick = isClueGiver && !hasActiveClue && drawnCard && !selectedClueCell;
   const waitingForClueInput = isClueGiver && !hasActiveClue && selectedClueCell != null;
   const showGuessPanel = !isClueGiver && hasActiveClue;
 
@@ -66,7 +84,7 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
 
   useEffect(() => {
     setClueInput('');
-  }, [selectedClueCell]);
+  }, [selectedClueCell, drawnCard]);
 
   const handleSubmit = () => {
     const trimmed = clueInput.trim();
@@ -86,6 +104,9 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
         <span className="text-sm font-semibold" style={{ color: currentPlayer?.color }}>
           {isMyTurn ? t.yourTurn : `${t.turnOf} ${currentPlayer?.name}`}
         </span>
+        <button onClick={onLeaveRoom} className="ml-auto px-3 py-1 text-xs text-text-muted hover:text-danger border border-border hover:border-danger rounded-cell transition-all">
+          {t.exit}
+        </button>
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -117,7 +138,8 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
               {room.cols.map((_, j) => {
                 const cell = room.grid[i][j];
                 const isActive = hasActiveClue && room.currentClue!.row === i && room.currentClue!.col === j;
-                const isClickableEmpty = waitingForSelection && !cell.revealed && !cell.clue;
+                const isDrawnCardCell = drawnCard && drawnCard.row === i && drawnCard.col === j && !cell.revealed;
+                const isClickableEmpty = waitingForCellClick && isDrawnCardCell && !cell.clue;
                 const isClickableGuess = showGuessPanel && !cell.revealed && cell.clue;
 
                 let cellClass = 'flex flex-col items-center justify-center p-1 rounded-cell border-2 min-h-[55px] md:min-h-[65px] transition-all text-center';
@@ -126,6 +148,8 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
                   cellClass += ' bg-success/20 border-success';
                 } else if (isActive) {
                   cellClass += ' bg-bg-cell border-warning animate-pulse-border';
+                } else if (isDrawnCardCell) {
+                  cellClass += ' bg-accent/10 border-accent animate-pulse-border';
                 } else {
                   cellClass += ' bg-bg-cell border-transparent';
                 }
@@ -159,11 +183,27 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
         </div>
       </div>
 
-      {waitingForSelection && (
+      {waitingForDraw && (
         <div className="fixed bottom-0 left-0 right-0 z-40 p-3">
           <div className="max-w-lg mx-auto bg-bg-card border-2 border-accent rounded-card p-5 shadow-lg">
             <h3 className="text-sm font-bold mb-2 text-accent-light">{t.yourClueTurn}</h3>
-            <p className="text-text-secondary text-xs">{t.selectCell}</p>
+            <p className="text-text-secondary text-xs mb-3">{t.deckRemaining} {room.cardDeckCount}</p>
+            <button onClick={onDrawCard} className="w-full px-4 py-3 bg-accent hover:bg-accent-hover text-white font-bold rounded-cell transition-all text-sm">
+              {t.drawCard}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {waitingForCellClick && drawnCard && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-3">
+          <div className="max-w-lg mx-auto bg-bg-card border-2 border-accent rounded-card p-5 shadow-lg">
+            <h3 className="text-sm font-bold mb-1 text-accent-light">{t.cardAssigned}</h3>
+            <p className="text-2xl font-bold text-accent-light mb-1">{drawnCard.label}</p>
+            <p className="text-text-secondary text-xs mb-3">{t.clickCellAssigned}</p>
+            <button onClick={onPassTurn} className="w-full px-4 py-2 bg-bg-primary hover:bg-bg-card-hover border-2 border-border text-text-secondary font-semibold rounded-cell transition-all text-sm">
+              {t.passTurn}
+            </button>
           </div>
         </div>
       )}
@@ -171,6 +211,12 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
       {waitingForClueInput && selectedClueCell && (
         <div className="fixed bottom-0 left-0 right-0 z-40 p-3">
           <div className="max-w-lg mx-auto bg-bg-card border-2 border-accent rounded-card p-5 shadow-lg">
+            {drawnCard && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-text-muted">{t.cardAssigned}</span>
+                <span className="text-sm font-bold text-accent-light bg-accent/20 px-2 py-0.5 rounded-md">{drawnCard.label}</span>
+              </div>
+            )}
             <h3 className="text-sm font-bold mb-1 text-accent-light">{t.clueFor}</h3>
             <p className="text-lg font-bold text-accent-light mb-2">
               {getCellLabel(selectedClueCell.row, selectedClueCell.col)} — {selectedClueCell.rowWord} x {selectedClueCell.colWord}
@@ -191,6 +237,9 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
                 {t.submit}
               </button>
             </div>
+            <button onClick={onPassTurn} className="w-full mt-2 px-4 py-2 bg-bg-primary hover:bg-bg-card-hover border-2 border-border text-text-secondary font-semibold rounded-cell transition-all text-xs">
+              {t.passTurn}
+            </button>
           </div>
         </div>
       )}

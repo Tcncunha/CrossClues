@@ -42,6 +42,9 @@ export interface Room {
   cluesGiven: number;
   maxClues: number;
   currentClue: { row: number; col: number; rowWord: string; colWord: string; clue?: string; clueBy?: string } | null;
+  cardDeckCount: number;
+  discardPileCount: number;
+  drawnCard: { row: number; col: number; label: string; rowWord: string; colWord: string } | null;
 }
 
 type Screen = 'welcome' | 'menu' | 'config' | 'lobby' | 'game' | 'gameover';
@@ -63,6 +66,7 @@ export default function GamePage() {
   const [room, setRoom] = useState<Room | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [selectedClueCell, setSelectedClueCell] = useState<{ row: number; col: number; rowWord: string; colWord: string } | null>(null);
+  const [drawnCard, setDrawnCard] = useState<{ row: number; col: number; label: string; rowWord: string; colWord: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<{ icon: string; title: string; detail: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -86,7 +90,14 @@ export default function GamePage() {
     const socket = socketRef.current;
     socket.connect();
 
-    socket.on('room-updated', (updatedRoom: Room) => setRoom(updatedRoom));
+    socket.on('room-updated', (updatedRoom: Room) => {
+      setRoom(prev => {
+        if (prev && prev.drawnCard && !updatedRoom.drawnCard) {
+          return { ...updatedRoom, drawnCard: prev.drawnCard };
+        }
+        return updatedRoom;
+      });
+    });
 
     socket.on('game-started', (updatedRoom: Room) => {
       setRoom(updatedRoom);
@@ -97,6 +108,7 @@ export default function GamePage() {
 
     socket.on('clue-words', (data: { rowWord: string; colWord: string }) => {
       setSelectedClueCell(prev => prev ? { ...prev, rowWord: data.rowWord, colWord: data.colWord } : null);
+      setDrawnCard(prev => prev ? { ...prev, rowWord: data.rowWord, colWord: data.colWord } : null);
     });
 
     socket.on('clue-given', (data: { row: number; col: number; clue: string; clueBy: string }) => {
@@ -105,9 +117,10 @@ export default function GamePage() {
         const newGrid = prev.grid.map(r => r.map(c => ({ ...c })));
         newGrid[data.row][data.col].clue = data.clue;
         newGrid[data.row][data.col].clueBy = data.clueBy;
-        return { ...prev, grid: newGrid, currentClue: data, cluesGiven: prev.cluesGiven + 1, currentTurn: prev.currentTurn };
+        return { ...prev, grid: newGrid, currentClue: { row: data.row, col: data.col, rowWord: newGrid[data.row][data.col].rowWord, colWord: newGrid[data.row][data.col].colWord, clue: data.clue, clueBy: data.clueBy }, cluesGiven: prev.cluesGiven + 1, currentTurn: prev.currentTurn };
       });
       setSelectedClueCell(null);
+      setDrawnCard(null);
     });
 
     socket.on('cell-revealed', (data: { row: number; col: number; revealedBy: string; playerName: string; rowWord: string; colWord: string; score: number }) => {
@@ -137,6 +150,20 @@ export default function GamePage() {
     socket.on('turn-changed', (data: { currentTurn: number; currentPlayer: string }) => {
       setRoom(prev => prev ? { ...prev, currentTurn: data.currentTurn, currentClue: null } : prev);
       setSelectedClueCell(null);
+      setDrawnCard(null);
+    });
+
+    socket.on('card-drawn', (data: { cardLabel: string; cardRow: number; cardCol: number; rowWord: string; colWord: string; drawnBy: string; deckCount: number }) => {
+      setRoom(prev => prev ? { ...prev, cardDeckCount: data.deckCount } : prev);
+      if (data.drawnBy === room?.players.find(p => p.id === socketRef.current.id)?.name) {
+        setDrawnCard({ row: data.cardRow, col: data.cardCol, label: data.cardLabel, rowWord: data.rowWord, colWord: data.colWord });
+      }
+    });
+
+    socket.on('turn-passed', (data: { passedBy: string; currentTurn: number; currentPlayer: string }) => {
+      setRoom(prev => prev ? { ...prev, currentTurn: data.currentTurn, currentClue: null } : prev);
+      setSelectedClueCell(null);
+      setDrawnCard(null);
     });
 
     socket.on('game-finished', (updatedRoom: Room) => {
@@ -160,7 +187,7 @@ export default function GamePage() {
 
   const handleCreateRoom = (name: string) => {
     if (!name) return showError(errText[lang].enterName);
-    setPlayer({ id: socketRef.current.id, name, isHost: true, color: '#e74c3c' });
+    setPlayer({ id: socketRef.current.id!, name, isHost: true, color: '#e74c3c' });
     setScreen('config');
   };
 
@@ -197,6 +224,12 @@ export default function GamePage() {
     });
   };
 
+  const handleAddTestPlayer = () => {
+    socketRef.current.emit('add-test-player', (res: any) => {
+      if (!res.success) showError(res.error);
+    });
+  };
+
   const handleCopyCode = () => {
     if (room) {
       navigator.clipboard.writeText(room.code);
@@ -207,6 +240,8 @@ export default function GamePage() {
 
   const handleSelectCell = (row: number, col: number) => {
     if (!room) return;
+    if (!drawnCard) return;
+    if (row !== drawnCard.row || col !== drawnCard.col) return;
     const cellData = room.grid[row][col];
     if (cellData.revealed || cellData.clue) return;
     setSelectedClueCell({ row, col, rowWord: cellData.rowWord, colWord: cellData.colWord });
@@ -214,6 +249,22 @@ export default function GamePage() {
       if (!res.success) {
         showError(res.error);
         setSelectedClueCell(null);
+      }
+    });
+  };
+
+  const handleDrawCard = () => {
+    socketRef.current.emit('draw-card', (res: any) => {
+      if (!res.success) {
+        showError(res.error);
+      }
+    });
+  };
+
+  const handlePassTurn = () => {
+    socketRef.current.emit('pass-turn', (res: any) => {
+      if (!res.success) {
+        showError(res.error);
       }
     });
   };
@@ -257,7 +308,18 @@ export default function GamePage() {
     setRoom(null);
     setPlayer(null);
     setSelectedClueCell(null);
+    setDrawnCard(null);
     setScreen('menu');
+  };
+
+  const handleLeaveRoom = () => {
+    socketRef.current.emit('leave-room', (res: any) => {
+      setRoom(null);
+      setPlayer(null);
+      setSelectedClueCell(null);
+      setDrawnCard(null);
+      setScreen('menu');
+    });
   };
 
   return (
@@ -281,9 +343,10 @@ export default function GamePage() {
           <GameLobby
             room={room}
             isHost={room.host === socketRef.current.id}
-            playerId={socketRef.current.id}
+            playerId={socketRef.current.id!}
             onStartGame={handleStartGame}
             onCopyCode={handleCopyCode}
+            onAddTestPlayer={handleAddTestPlayer}
             copied={copied}
             lang={lang}
           />
@@ -291,11 +354,15 @@ export default function GamePage() {
         {screen === 'game' && room && (
           <GameBoard
             room={room}
-            playerId={socketRef.current.id}
+            playerId={socketRef.current.id!}
             selectedClueCell={selectedClueCell}
             onSelectCell={handleSelectCell}
             onSubmitClue={handleSubmitClue}
             onGuessCell={handleGuessCell}
+            onDrawCard={handleDrawCard}
+            onPassTurn={handlePassTurn}
+            onLeaveRoom={handleLeaveRoom}
+            drawnCard={drawnCard}
             isClueGiver={isClueGiver()}
             getMyIndex={getMyIndex}
             lang={lang}
@@ -304,7 +371,7 @@ export default function GamePage() {
         {screen === 'gameover' && room && (
           <GameOver
             room={room}
-            playerId={socketRef.current.id}
+            playerId={socketRef.current.id!}
             onRestart={handleRestart}
             onBackToMenu={handleBackToMenu}
             lang={lang}

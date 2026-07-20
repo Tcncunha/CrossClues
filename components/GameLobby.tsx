@@ -9,16 +9,17 @@ interface Props {
   playerId: string;
   onStartGame: () => void;
   onCopyCode: () => void;
+  onAddTestPlayer: () => void;
   copied: boolean;
   lang: Lang;
 }
 
 const ui = {
-  en: { title: 'Waiting Room', subtitle: 'Share the code with your friends', code: 'Code', players: 'Players', start: 'Start Game', waiting: 'Waiting for host to start...' },
-  pt: { title: 'Sala de Espera', subtitle: 'Compartilhe o codigo com seus amigos', code: 'Codigo', players: 'Jogadores', start: 'Iniciar Partida', waiting: 'Aguardando o host iniciar...' },
+  en: { title: 'Waiting Room', subtitle: 'Share the code with your friends', code: 'Code', players: 'Players', start: 'Start Game', waiting: 'Waiting for host to start...', addBot: '+ Add Test Player', debug: 'Debug' },
+  pt: { title: 'Sala de Espera', subtitle: 'Compartilhe o codigo com seus amigos', code: 'Codigo', players: 'Jogadores', start: 'Iniciar Partida', waiting: 'Aguardando o host iniciar...', addBot: '+ Adicionar Bot', debug: 'Debug' },
 };
 
-export default function GameLobby({ room, isHost, onStartGame, onCopyCode, copied, lang }: Props) {
+export default function GameLobby({ room, isHost, onStartGame, onCopyCode, onAddTestPlayer, copied, lang }: Props) {
   const t = ui[lang];
 
   return (
@@ -68,6 +69,18 @@ export default function GameLobby({ room, isHost, onStartGame, onCopyCode, copie
             <p className="text-text-muted italic">{t.waiting}</p>
           )}
         </div>
+
+        {isHost && (
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-[0.65rem] text-text-muted mb-2 uppercase tracking-wider">{t.debug}</p>
+            <button
+              onClick={onAddTestPlayer}
+              className="w-full py-2 bg-bg-primary hover:bg-bg-cell border border-border text-text-secondary text-sm font-medium rounded-cell transition-all"
+            >
+              {t.addBot}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
