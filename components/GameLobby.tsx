@@ -1,6 +1,7 @@
 'use client';
 
 import { Room } from '@/app/page';
+import { Lang } from '@/app/page';
 
 interface Props {
   room: Room;
@@ -8,22 +9,31 @@ interface Props {
   playerId: string;
   onStartGame: () => void;
   onCopyCode: () => void;
+  onAddTestPlayer: () => void;
   copied: boolean;
+  lang: Lang;
 }
 
-export default function GameLobby({ room, isHost, onStartGame, onCopyCode, copied }: Props) {
+const ui = {
+  en: { title: 'Waiting Room', subtitle: 'Share the code with your friends', code: 'Code', players: 'Players', start: 'Start Game', waiting: 'Waiting for host to start...', addBot: '+ Add Test Player', debug: 'Debug' },
+  pt: { title: 'Sala de Espera', subtitle: 'Compartilhe o codigo com seus amigos', code: 'Codigo', players: 'Jogadores', start: 'Iniciar Partida', waiting: 'Aguardando o host iniciar...', addBot: '+ Adicionar Bot', debug: 'Debug' },
+};
+
+export default function GameLobby({ room, isHost, onStartGame, onCopyCode, onAddTestPlayer, copied, lang }: Props) {
+  const t = ui[lang];
+
   return (
     <div className="flex flex-col items-center">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-accent-light to-accent bg-clip-text text-transparent mb-2">
-          Sala de Espera
+          {t.title}
         </h1>
-        <p className="text-text-secondary">Compartilhe o codigo com seus amigos</p>
+        <p className="text-text-secondary">{t.subtitle}</p>
       </div>
 
       <div className="w-full bg-bg-card rounded-card p-8 border border-border shadow-lg">
         <div className="flex items-center justify-center gap-3 mb-6 p-4 bg-bg-primary rounded-cell">
-          <span className="text-text-secondary text-sm">Codigo:</span>
+          <span className="text-text-secondary text-sm">{t.code}:</span>
           <span className="text-2xl font-bold tracking-widest text-accent-light">{room.code}</span>
           <button onClick={onCopyCode} className="text-xl px-2 py-1 rounded hover:bg-bg-cell transition-colors" title="Copiar codigo">
             {copied ? '✅' : '📋'}
@@ -32,7 +42,7 @@ export default function GameLobby({ room, isHost, onStartGame, onCopyCode, copie
 
         <div className="mb-6">
           <h3 className="text-sm text-text-secondary font-medium mb-3">
-            Jogadores ({room.players.length})
+            {t.players} ({room.players.length})
           </h3>
           <div className="flex flex-col gap-2">
             {room.players.map(p => (
@@ -51,15 +61,26 @@ export default function GameLobby({ room, isHost, onStartGame, onCopyCode, copie
           {isHost ? (
             <button
               onClick={onStartGame}
-              disabled={room.players.length < 2}
-              className="w-full py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-cell transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full py-3 bg-accent hover:bg-accent-hover text-white font-semibold rounded-cell transition-all hover:-translate-y-0.5 active:translate-y-0"
             >
-              Iniciar Partida
+              {t.start}
             </button>
           ) : (
-            <p className="text-text-muted italic">Aguardando o host iniciar...</p>
+            <p className="text-text-muted italic">{t.waiting}</p>
           )}
         </div>
+
+        {isHost && (
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-[0.65rem] text-text-muted mb-2 uppercase tracking-wider">{t.debug}</p>
+            <button
+              onClick={onAddTestPlayer}
+              className="w-full py-2 bg-bg-primary hover:bg-bg-cell border border-border text-text-secondary text-sm font-medium rounded-cell transition-all"
+            >
+              {t.addBot}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

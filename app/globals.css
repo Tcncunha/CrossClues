@@ -1,10 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #0f0f23;
+  --color-bg-secondary: #1a1a3e;
+  --color-bg-card: #1e1e42;
+  --color-bg-cell: #2a2a5a;
+  --color-bg-cell-hover: #3a3a7a;
+  --color-accent: #6c5ce7;
+  --color-accent-hover: #7c6cf7;
+  --color-accent-light: #a29bfe;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #b2b2d8;
+  --color-text-muted: #6c6c9e;
+  --color-success: #00b894;
+  --color-error: #e74c3c;
+  --color-warning: #fdcb6e;
+  --color-border: #3a3a6a;
+  --radius-card: 12px;
+  --radius-cell: 8px;
+}
 
 @layer base {
   body {
-    @apply bg-bg-primary text-text-primary font-sans min-h-screen overflow-x-hidden;
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-family: system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
   }
 }
 

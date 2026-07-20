@@ -3,8 +3,6 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const next = require('next');
-const path = require('path');
-const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -16,57 +14,30 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-const WORDS_FILE = path.join(__dirname, 'words.json');
+const wordCache = {};
 
-function loadWordsLocal() {
-  try {
-    const data = fs.readFileSync(WORDS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Erro ao carregar words.json:', err.message);
-    return { facil: [], medio: [], dificil: [] };
-  }
-}
+async function loadWordsByLanguage(language) {
+  if (wordCache[language]) return wordCache[language];
 
-let WORD_LISTS = loadWordsLocal();
+  const { data, error } = await supabase
+    .from('words')
+    .select('word, Level')
+    .eq('language', language)
+    .eq('is_active', true);
 
-async function loadWordsFromSupabase() {
-  try {
-    const { data: newSchemaData, error: newSchemaErr } = await supabase
-      .from('words')
-      .select('word, length, language')
-      .eq('is_active', true);
+  if (error) throw error;
 
-    if (!newSchemaErr && newSchemaData && newSchemaData.length > 0) {
-      const enWords = newSchemaData
-        .filter(row => row.language === 'EN')
-        .map(row => row.word);
-      console.log('Palavras EN carregadas do Supabase (novo schema):', enWords.length);
-      return { facil: enWords, medio: enWords, dificil: enWords };
-    }
+  const result = { facil: [], medio: [], dificil: [] };
+  data.forEach(row => {
+    const level = row.Level;
+    const word = row.word;
+    if (level === 1) result.facil.push(word);
+    else if (level === 2) result.medio.push(word);
+    else if (level === 3) result.dificil.push(word);
+  });
 
-    const { data, error } = await supabase
-      .from('words')
-      .select('word, difficulty');
-    if (error) throw error;
-    const result = { facil: [], medio: [], dificil: [] };
-    data.forEach(row => {
-      if (result[row.difficulty]) result[row.difficulty].push(row.word);
-    });
-    console.log('Palavras carregadas do Supabase (schema antigo):', {
-      facil: result.facil.length,
-      medio: result.medio.length,
-      dificil: result.dificil.length,
-    });
-    return result;
-  } catch (err) {
-    console.error('Erro ao buscar do Supabase, usando fallback local:', err.message);
-    return loadWordsLocal();
-  }
-}
-
-async function initWords() {
-  WORD_LISTS = await loadWordsFromSupabase();
+  wordCache[language] = result;
+  return result;
 }
 
 const rooms = new Map();
@@ -110,10 +81,27 @@ function createGrid(words, size) {
   return { rows, cols, grid };
 }
 
-function createRoom(hostName, difficulty, gridSize) {
+function createCardDeck(grid, gridSize) {
+  const cards = [];
+  const colLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (let i = 0; i < gridSize; i++) {
+    for (let j = 0; j < gridSize; j++) {
+      if (!grid[i][j].revealed) {
+        cards.push({
+          row: i,
+          col: j,
+          label: `${colLetters[j]}${i + 1}`,
+          rowWord: grid[i][j].rowWord,
+          colWord: grid[i][j].colWord,
+        });
+      }
+    }
+  }
+  return shuffleArray(cards);
+}
+
+function createRoom(hostName, difficulty, gridSize, wordLanguage) {
   const code = generateRoomCode();
-  const words = WORD_LISTS[difficulty] || WORD_LISTS.medio;
-  const { rows, cols, grid } = createGrid(words, gridSize);
   const room = {
     code,
     host: null,
@@ -121,14 +109,18 @@ function createRoom(hostName, difficulty, gridSize) {
     state: 'waiting',
     difficulty: difficulty || 'medio',
     gridSize: gridSize || 4,
-    rows,
-    cols,
-    grid,
+    wordLanguage: wordLanguage || 'EN',
+    rows: [],
+    cols: [],
+    grid: [],
     currentTurn: 0,
     scores: {},
     cluesGiven: 0,
     maxClues: gridSize * gridSize,
     currentClue: null,
+    cardDeck: [],
+    discardPile: [],
+    drawnCard: null,
   };
   rooms.set(code, room);
   return room;
@@ -157,6 +149,7 @@ function getRoomState(room) {
     state: room.state,
     difficulty: room.difficulty,
     gridSize: room.gridSize,
+    wordLanguage: room.wordLanguage,
     rows: room.rows,
     cols: room.cols,
     grid: safeGrid,
@@ -165,6 +158,9 @@ function getRoomState(room) {
     cluesGiven: room.cluesGiven,
     maxClues: room.maxClues,
     currentClue: room.currentClue,
+    cardDeckCount: room.cardDeck.length,
+    discardPileCount: room.discardPile.length,
+    drawnCard: room.drawnCard,
   };
 }
 
@@ -184,33 +180,24 @@ app.prepare().then(() => {
 
   // REST API routes
   server.get('/api/reload-words', async (req, res) => {
-    WORD_LISTS = await loadWordsFromSupabase();
-    const counts = {
-      facil: WORD_LISTS.facil?.length || 0,
-      medio: WORD_LISTS.medio?.length || 0,
-      dificil: WORD_LISTS.dificil?.length || 0,
-    };
-    res.json({ success: true, counts });
+    Object.keys(wordCache).forEach(k => delete wordCache[k]);
+    res.json({ success: true, message: 'Word cache cleared' });
   });
 
   server.get('/api/words', (req, res) => {
     res.json({
-      facil: WORD_LISTS.facil?.length || 0,
-      medio: WORD_LISTS.medio?.length || 0,
-      dificil: WORD_LISTS.dificil?.length || 0,
+      wordCacheKeys: Object.keys(wordCache),
     });
   });
 
   server.use(express.json());
 
   server.post('/api/words', async (req, res) => {
-    const { word, difficulty } = req.body;
-    if (!word || !difficulty) return res.status(400).json({ error: 'word e difficulty sao obrigatorios' });
-    if (!['facil', 'medio', 'dificil'].includes(difficulty)) return res.status(400).json({ error: 'difficulty deve ser: facil, medio ou dificil' });
+    const { word, Level, language } = req.body;
+    if (!word) return res.status(400).json({ error: 'word is required' });
     try {
-      const { data, error } = await supabase.from('words').insert([{ word, difficulty }]).select();
+      const { data, error } = await supabase.from('words').insert([{ word, Level: Level || 1, language: language || 'EN', is_active: true }]).select();
       if (error) throw error;
-      WORD_LISTS[difficulty].push(word);
       res.json({ success: true, word: data[0] });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -232,8 +219,8 @@ app.prepare().then(() => {
     try {
       const { data: words, error: wordsErr } = await supabase.from('words').select('*').limit(20);
       if (wordsErr) throw wordsErr;
-      const counts = { facil: 0, medio: 0, dificil: 0 };
-      words.forEach(r => { if (counts[r.difficulty] !== undefined) counts[r.difficulty]++; });
+      const counts = { Level1: 0, Level2: 0, Level3: 0 };
+      words.forEach(r => { if (r.Level) counts['Level' + r.Level]++; });
       res.json({ success: true, tables: { words: { data: words, counts } } });
     } catch (err) {
       res.json({ success: false, error: err.message });
@@ -244,8 +231,8 @@ app.prepare().then(() => {
   io.on('connection', (socket) => {
     console.log(`Jogador conectado: ${socket.id}`);
 
-    socket.on('create-room', ({ playerName, difficulty, gridSize }, callback) => {
-      const room = createRoom(playerName, difficulty || 'medio', gridSize || 4);
+    socket.on('create-room', async ({ playerName, difficulty, gridSize, wordLanguage }, callback) => {
+      const room = createRoom(playerName, difficulty || 'medio', gridSize || 4, wordLanguage || 'EN');
       const player = { id: socket.id, name: playerName, isHost: true, color: getPlayerColor(0) };
       room.host = socket.id;
       room.players.push(player);
@@ -269,15 +256,74 @@ app.prepare().then(() => {
       io.to(room.code).emit('room-updated', getRoomState(room));
     });
 
-    socket.on('start-game', (callback) => {
+    socket.on('add-test-player', (callback) => {
+      const room = rooms.get(socket.roomCode);
+      if (!room) return callback({ success: false, error: 'Nao esta em uma sala' });
+      if (room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode adicionar jogadores' });
+      if (room.players.length >= 6) return callback({ success: false, error: 'Sala cheia (max. 6 jogadores)' });
+      const botNames = ['Bot Alpha', 'Bot Beta', 'Bot Gamma', 'Bot Delta', 'Bot Omega'];
+      const botName = botNames[room.players.length - 1] || `Bot ${room.players.length}`;
+      const botId = `bot_${Date.now()}_${room.players.length}`;
+      const player = { id: botId, name: botName, isHost: false, color: getPlayerColor(room.players.length) };
+      room.players.push(player);
+      room.scores[botId] = 0;
+      callback({ success: true, room: getRoomState(room) });
+      io.to(room.code).emit('room-updated', getRoomState(room));
+    });
+
+    socket.on('start-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
-      if (room.players.length < 2) return callback({ success: false, error: 'Minimo 2 jogadores' });
-      const { rows, cols, grid } = createGrid(WORD_LISTS[room.difficulty] || WORD_LISTS.medio, room.gridSize);
+      if (room.players.length < 1) return callback({ success: false, error: 'Minimo 1 jogador' });
+      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      const words = wordLists[room.difficulty] || wordLists.medio;
+      const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
+      room.cardDeck = createCardDeck(grid, room.gridSize);
+      room.discardPile = [];
+      room.drawnCard = null;
       Object.keys(room.scores).forEach(k => { room.scores[k] = 0; });
       io.to(room.code).emit('game-started', getRoomState(room));
+      callback({ success: true });
+    });
+
+    socket.on('draw-card', (callback) => {
+      const room = rooms.get(socket.roomCode);
+      if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
+      const currentPlayer = room.players[room.currentTurn];
+      if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez' });
+      if (room.drawnCard) return callback({ success: false, error: 'Voce ja comprou uma carta' });
+      if (room.currentClue) return callback({ success: false, error: 'Ha uma dica ativa' });
+      if (room.cardDeck.length === 0) {
+        if (room.discardPile.length === 0) return callback({ success: false, error: 'Nenhuma carta restante' });
+        room.cardDeck = shuffleArray(room.discardPile);
+        room.discardPile = [];
+      }
+      const card = room.cardDeck.pop();
+      const cell = room.grid[card.row][card.col];
+      if (cell.revealed) {
+        room.discardPile.push(card);
+        return callback({ success: false, error: 'Celula ja revelada, comprou outra carta' });
+      }
+      card.rowWord = cell.rowWord;
+      card.colWord = cell.colWord;
+      room.drawnCard = card;
+      io.to(room.code).emit('card-drawn', { cardLabel: card.label, cardRow: card.row, cardCol: card.col, rowWord: card.rowWord, colWord: card.colWord, drawnBy: currentPlayer.name, deckCount: room.cardDeck.length });
+      callback({ success: true, card });
+    });
+
+    socket.on('pass-turn', (callback) => {
+      const room = rooms.get(socket.roomCode);
+      if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
+      const currentPlayer = room.players[room.currentTurn];
+      if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez' });
+      if (!room.drawnCard) return callback({ success: false, error: 'Voce nao comprou uma carta' });
+      room.discardPile.push(room.drawnCard);
+      room.drawnCard = null;
+      room.currentClue = null;
+      room.currentTurn = (room.currentTurn + 1) % room.players.length;
+      io.to(room.code).emit('turn-passed', { passedBy: currentPlayer.name, currentTurn: room.currentTurn, currentPlayer: room.players[room.currentTurn]?.name });
       callback({ success: true });
     });
 
@@ -286,6 +332,8 @@ app.prepare().then(() => {
       if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
       const currentPlayer = room.players[room.currentTurn];
       if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez de dar dica' });
+      if (!room.drawnCard) return callback({ success: false, error: 'Voce precisa comprar uma carta primeiro' });
+      if (row !== room.drawnCard.row || col !== room.drawnCard.col) return callback({ success: false, error: 'So pode usar a celula da carta comprada' });
       const cell = room.grid[row][col];
       if (cell.revealed) return callback({ success: false, error: 'Celula ja foi revelada' });
       room.currentClue = { row, col, rowWord: cell.rowWord, colWord: cell.colWord };
@@ -303,6 +351,7 @@ app.prepare().then(() => {
       room.grid[row][col].clue = clue;
       room.grid[row][col].clueBy = currentPlayer.name;
       room.cluesGiven++;
+      room.drawnCard = null;
       io.to(room.code).emit('clue-given', { row, col, clue, clueBy: currentPlayer.name });
       callback({ success: true });
     });
@@ -321,6 +370,7 @@ app.prepare().then(() => {
         cell.revealedBy = socket.id;
         room.scores[socket.id] = (room.scores[socket.id] || 0) + 1;
         room.currentClue = null;
+        room.drawnCard = null;
         io.to(room.code).emit('cell-revealed', { row, col, revealedBy: socket.id, playerName: room.players.find(p => p.id === socket.id)?.name, rowWord: cell.rowWord, colWord: cell.colWord, score: room.scores[socket.id] });
         if (checkAllRevealed(room)) {
           room.state = 'finished';
@@ -336,6 +386,7 @@ app.prepare().then(() => {
         room.grid[clueRow][clueCol].clue = null;
         room.grid[clueRow][clueCol].clueBy = null;
         room.currentClue = null;
+        room.drawnCard = null;
         io.to(room.code).emit('wrong-guess', { row, col, clueRow, clueCol, guessedBy: socket.id, playerName: room.players.find(p => p.id === socket.id)?.name });
         room.currentTurn = (room.currentTurn + 1) % room.players.length;
         io.to(room.code).emit('turn-changed', { currentTurn: room.currentTurn, currentPlayer: room.players[room.currentTurn]?.name });
@@ -343,14 +394,44 @@ app.prepare().then(() => {
       }
     });
 
-    socket.on('restart-game', (callback) => {
+    socket.on('restart-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
-      const { rows, cols, grid } = createGrid(WORD_LISTS[room.difficulty] || WORD_LISTS.medio, room.gridSize);
+      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      const words = wordLists[room.difficulty] || wordLists.medio;
+      const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
+      room.cardDeck = createCardDeck(grid, room.gridSize);
+      room.discardPile = [];
+      room.drawnCard = null;
       Object.keys(room.scores).forEach(k => { room.scores[k] = 0; });
       io.to(room.code).emit('game-restarted', getRoomState(room));
+      callback({ success: true });
+    });
+
+    socket.on('leave-room', (callback) => {
+      const roomCode = socket.roomCode;
+      if (!roomCode) return callback({ success: false, error: 'Nao esta em uma sala' });
+      const room = rooms.get(roomCode);
+      if (!room) return callback({ success: false, error: 'Sala nao encontrada' });
+      const leavingPlayer = room.players.find(p => p.id === socket.id);
+      room.players = room.players.filter(p => p.id !== socket.id);
+      delete room.scores[socket.id];
+      socket.leave(roomCode);
+      socket.roomCode = null;
+      if (room.players.length === 0) {
+        rooms.delete(roomCode);
+      } else {
+        if (room.host === socket.id) {
+          room.host = room.players[0].id;
+          room.players[0].isHost = true;
+        }
+        if (room.state === 'playing' && room.currentTurn >= room.players.length) {
+          room.currentTurn = 0;
+        }
+        io.to(roomCode).emit('player-left', { playerName: leavingPlayer?.name, room: getRoomState(room) });
+      }
       callback({ success: true });
     });
 
@@ -383,20 +464,10 @@ app.prepare().then(() => {
 
   const PORT = process.env.PORT || 3000;
 
-  initWords().then(() => {
-    httpServer.listen(PORT, () => {
-      console.log(`=================================`);
-      console.log(`  Entre Linhas Online (Next.js)`);
-      console.log(`  Rodando em http://localhost:${PORT}`);
-      console.log(`=================================`);
-    });
-  }).catch(err => {
-    console.error('Erro ao inicializar palavras:', err);
-    httpServer.listen(PORT, () => {
-      console.log(`=================================`);
-      console.log(`  Entre Linhas Online (fallback local)`);
-      console.log(`  Rodando em http://localhost:${PORT}`);
-      console.log(`=================================`);
-    });
+  httpServer.listen(PORT, () => {
+    console.log(`=================================`);
+    console.log(`  Entre Linhas Online (Next.js)`);
+    console.log(`  Rodando em http://localhost:${PORT}`);
+    console.log(`=================================`);
   });
 });
