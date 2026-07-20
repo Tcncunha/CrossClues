@@ -285,7 +285,7 @@ export default function GamePage() {
   const handleGuessCell = (row: number, col: number) => {
     if (!room || isClueGiver() || !room.currentClue) return;
     const cellData = room.grid[row][col];
-    if (cellData.revealed || !cellData.clue) return;
+    if (cellData.revealed) return;
     socketRef.current.emit('guess-cell', { row, col }, (res: any) => {
       if (!res.success) return showError(res.error);
       if (res.correct) {
@@ -371,6 +371,7 @@ export default function GamePage() {
             isClueGiver={isClueGiver()}
             getMyIndex={getMyIndex}
             lang={lang}
+            error={error}
           />
         )}
         {screen === 'gameover' && room && (

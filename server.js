@@ -363,7 +363,6 @@ app.prepare().then(() => {
       if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
       const cell = room.grid[row][col];
       if (cell.revealed) return callback({ success: false, error: 'Celula ja foi revelada' });
-      if (!cell.clue) return callback({ success: false, error: 'Nenhuma dica nesta celula' });
       const currentPlayer = room.players[room.currentTurn];
       if (currentPlayer && currentPlayer.id === socket.id) return callback({ success: false, error: 'Quem deu a dica nao pode adivinhar' });
       const guessCorrect = (row === room.currentClue.row && col === room.currentClue.col);

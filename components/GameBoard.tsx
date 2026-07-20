@@ -17,6 +17,7 @@ interface Props {
   isClueGiver: boolean;
   getMyIndex: () => number;
   lang: 'en' | 'pt';
+  error?: string | null;
 }
 
 const ui = {
@@ -66,7 +67,7 @@ function initials(name: string) {
   return name.trim().slice(0, 2).toUpperCase() || '??';
 }
 
-export default function GameBoard({ room, playerId, selectedClueCell, onSelectCell, onSubmitClue, onGuessCell, onDrawCard, onPassTurn, onLeaveRoom, drawnCard, isClueGiver, getMyIndex, lang }: Props) {
+export default function GameBoard({ room, playerId, selectedClueCell, onSelectCell, onSubmitClue, onGuessCell, onDrawCard, onPassTurn, onLeaveRoom, drawnCard, isClueGiver, getMyIndex, lang, error }: Props) {
   const [clueInput, setClueInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const t = ui[lang];
@@ -131,7 +132,14 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
         ))}
       </div>
 
+      {error && (
+        <div className="px-3 py-2 bg-error/15 border border-error rounded-cell text-error text-xs text-center animate-shake">
+          {error}
+        </div>
+      )}
+
       <div className="overflow-x-auto py-2">
+        <div className="flex gap-2 items-start justify-center">
         <div className="inline-grid gap-1 mx-auto" style={{ gridTemplateColumns: `minmax(64px, 90px) repeat(${size}, minmax(56px, 80px))` }}>
           <div />
           {room.cols.map((word, j) => (
@@ -152,7 +160,7 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
                 const isActive = hasActiveClue && room.currentClue!.row === i && room.currentClue!.col === j;
                 const isDrawnCardCell = drawnCard && drawnCard.row === i && drawnCard.col === j && !cell.revealed;
                 const isClickableEmpty = waitingForCellClick && isDrawnCardCell && !cell.clue;
-                const isClickableGuess = showGuessPanel && !cell.revealed && cell.clue;
+                const isClickableGuess = showGuessPanel && !cell.revealed;
 
                 let cellClass = 'relative flex flex-col items-center justify-center p-1 rounded-cell border-2 min-h-[55px] md:min-h-[65px] transition-all text-center';
 
@@ -195,6 +203,36 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
               })}
             </div>
           ))}
+        </div>
+        {showGuessPanel && room.currentClue && (
+          <div className="flex flex-col gap-1 shrink-0 mt-1">
+            <span className="text-[0.55rem] font-mono-label text-text-muted uppercase tracking-wider mb-1 text-center">{lang === 'en' ? 'Select cell' : 'Selecionar'}</span>
+            {(() => {
+              const cells: { row: number; col: number; label: string; hasClue: boolean }[] = [];
+              for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                  const c = room.grid[i][j];
+                  if (!c.revealed) {
+                    cells.push({ row: i, col: j, label: getCellLabel(i, j), hasClue: !!c.clue });
+                  }
+                }
+              }
+              return cells.map(({ row, col, label, hasClue }) => (
+                <button
+                  key={label}
+                  onClick={() => onGuessCell(row, col)}
+                  className={`w-12 h-8 rounded-cell border text-xs font-mono-label font-bold transition-all ${
+                    hasClue
+                      ? 'bg-warning/15 border-warning/50 text-warning hover:bg-warning/30'
+                      : 'bg-bg-cell border-border text-text-muted hover:bg-bg-cell-hover hover:border-accent-light hover:text-accent-light'
+                  }`}
+                >
+                  {label}
+                </button>
+              ));
+            })()}
+          </div>
+        )}
         </div>
       </div>
 
@@ -268,7 +306,7 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
           <div className="max-w-lg mx-auto bg-bg-card border-2 border-warning rounded-card p-5 shadow-2xl shadow-black/50">
             <h3 className="font-display text-sm font-bold mb-1 text-warning">{t.clueReceived}</h3>
             <p className="text-lg font-bold text-warning mb-1">{room.currentClue.clue}</p>
-            <p className="text-text-muted text-xs italic mb-2">{t.clueFrom} {room.currentClue.clueBy} — <span className="font-mono-label not-italic">{getCellLabel(room.currentClue.row, room.currentClue.col)}</span></p>
+            <p className="text-text-muted text-xs italic mb-2">{t.clueFrom} {room.currentClue.clueBy}</p>
             <p className="text-text-secondary text-xs">{t.clickCell}</p>
           </div>
         </div>
