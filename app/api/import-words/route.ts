@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -11,7 +11,48 @@ const BATCH_SIZE = 50;
 interface WordEntry {
   word: string;
   language: string;
+  level: number;
   is_active: boolean;
+}
+
+// Simple in-memory rate limit for admin import (20 req/min per IP)
+const rateMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+  entry.count += 1;
+  if (entry.count > 20) return true;
+  return false;
+}
+
+function isAuthorized(request: Request): boolean {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') return false;
+    return true;
+  }
+  const auth = request.headers.get('authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  return token === secret;
+}
+
+function unauthorizedResponse(): NextResponse {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+}
+
+function getLevelForWord(word: string): number {
+  const len = word.length;
+  if (len <= 3) return 1;
+  if (len <= 5) return 2;
+  return 3;
 }
 
 async function fetchRandomWords(count: number): Promise<string[]> {
@@ -23,7 +64,7 @@ async function fetchRandomWords(count: number): Promise<string[]> {
     const batchSize = Math.min(BATCH_SIZE, needed);
 
     const res = await fetch(
-      `https://random-word-api.vercel.app/api/v1?wordlength=5&count=${batchSize}`
+      `https://random-word-api.vercel.app/api?words=${batchSize}`
     );
 
     if (!res.ok) {
@@ -45,22 +86,33 @@ async function fetchRandomWords(count: number): Promise<string[]> {
 }
 
 export async function POST(request: Request) {
+  if (!isAuthorized(request)) {
+    return unauthorizedResponse();
+  }
+
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (isRateLimited(ip)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
     const targetCount = Math.min(body.count || 100, 500);
+    const requestedLevel = body.level && [1, 2, 3].includes(Number(body.level)) ? Number(body.level) : null;
+    const requestedLanguage = body.language && ['EN', 'PT', 'ES', 'PL', 'ZH'].includes(body.language) ? body.language : 'EN';
 
-    console.log(`Buscando ${targetCount} palavras aleatorias...`);
+    console.log(`Fetching ${targetCount} random words...`);
     const rawWords = await fetchRandomWords(targetCount);
-    console.log(`${rawWords.length} palavras obtidas da API`);
+    console.log(`${rawWords.length} words fetched from API`);
 
     const entries: WordEntry[] = rawWords.map(word => ({
       word,
-      language: 'EN',
+      language: requestedLanguage,
+      level: requestedLevel ?? getLevelForWord(word),
       is_active: true,
     }));
 
     const inserted: WordEntry[] = [];
-    const skipped: string[] = [];
 
     for (let i = 0; i < entries.length; i += BATCH_SIZE) {
       const batch = entries.slice(i, i + BATCH_SIZE);
@@ -96,7 +148,12 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Protect GET as well if ADMIN_SECRET is configured (read-only stats)
+  if (!isAuthorized(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const { data, error, count } = await supabase
       .from('words')
@@ -106,9 +163,16 @@ export async function GET() {
 
     if (error) throw error;
 
+    const byLevel: Record<number, number> = {};
+    data?.forEach((row: any) => {
+      const lvl = row.level ?? row.Level;
+      if (lvl) byLevel[lvl] = (byLevel[lvl] || 0) + 1;
+    });
+
     return NextResponse.json({
       total: count,
-      sample: data?.slice(0, 10).map(w => w.word) || [],
+      byLevel,
+      sample: data?.slice(0, 10).map((w: any) => w.word) || [],
     });
   } catch (err: any) {
     return NextResponse.json(

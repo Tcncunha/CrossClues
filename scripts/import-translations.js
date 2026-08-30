@@ -387,7 +387,7 @@ async function main() {
 
   const { data: wordsData, error: fetchError } = await supabase
     .from('words')
-    .select('word, Level')
+    .select('word, level')
     .eq('language', 'EN')
     .eq('is_active', true);
 
@@ -398,7 +398,7 @@ async function main() {
 
   const wordLevels = {};
   wordsData.forEach(row => {
-    wordLevels[row.word.toUpperCase()] = row.Level;
+    wordLevels[row.word.toUpperCase()] = row.level ?? row.Level; // fallback for legacy DB
   });
 
   console.log(`Found ${Object.keys(wordLevels).length} English words in database.\n`);
@@ -425,7 +425,7 @@ async function main() {
         rows.push({
           word: TRANSLATIONS[word][lang],
           language: lang,
-          Level: level,
+          level: level,
           is_active: true
         });
       }

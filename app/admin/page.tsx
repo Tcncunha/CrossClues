@@ -12,7 +12,8 @@ interface ImportResult {
 
 interface WordStats {
   total: number;
-  byLength: Record<number, number>;
+  byLevel: Record<number, number>;
+  byLength?: Record<number, number>;
   sample: string[];
   error?: string;
 }
@@ -31,7 +32,7 @@ export default function AdminPage() {
       const data = await res.json();
       setStats(data);
     } catch {
-      setStats({ total: 0, byLength: {}, sample: [], error: 'Falha ao carregar stats' });
+      setStats({ total: 0, byLevel: {}, byLength: {}, sample: [], error: 'Falha ao carregar stats' });
     }
     setStatsLoading(false);
   };
@@ -76,18 +77,18 @@ export default function AdminPage() {
               <p className="text-lg mb-2">
                 Total de palavras EN: <span className="text-[#fdcb6e] font-bold">{stats?.total || 0}</span>
               </p>
-              {stats?.byLength && Object.keys(stats.byLength).length > 0 && (
+              {((stats?.byLevel && Object.keys(stats.byLevel).length > 0) || (stats?.byLength && Object.keys(stats.byLength).length > 0)) && (
                 <div className="mt-3">
-                  <p className="text-sm text-gray-400 mb-1">Por tamanho:</p>
+                  <p className="text-sm text-gray-400 mb-1">Por level:</p>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(stats.byLength)
+                    {Object.entries((stats.byLevel as any) ?? stats.byLength ?? {})
                       .sort(([a], [b]) => Number(a) - Number(b))
                       .map(([len, qty]) => (
                         <span
                           key={len}
                           className="bg-[#0f3460] px-3 py-1 rounded-full text-sm"
                         >
-                          {len} letras: <strong>{qty}</strong>
+                          Level {len}: <strong>{qty}</strong>
                         </span>
                       ))}
                   </div>
@@ -164,17 +165,23 @@ export default function AdminPage() {
         <div className="bg-[#16213e] rounded-xl p-6">
           <h2 className="text-xl font-semibold mb-4">📋 Schema da Tabela</h2>
           <pre className="bg-[#0f3460] rounded-lg p-4 text-sm overflow-x-auto text-[#2ecc71]">
-{`CREATE TABLE words (
-    id        INT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    word      VARCHAR(20) NOT NULL,
-    length    TINYINT NOT NULL,
-    language  CHAR(2) NOT NULL,
+{`CREATE TABLE public.words (
+    id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    word       VARCHAR(20) NOT NULL,
+    language  CHAR(2) NOT NULL CHECK (language IN ('EN','PT','ES','PL','ZH')),
+    level      SMALLINT NOT NULL CHECK (level BETWEEN 1 AND 3),
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (word, language)
 );
 
 CREATE INDEX idx_word_lookup
-  ON words (language, length, is_active);`}
+  ON public.words (language, level, is_active) WHERE is_active = true;
+
+ALTER TABLE public.words ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow read for anon"
+  ON public.words FOR SELECT TO anon USING (is_active = true);
+-- service_role bypasses RLS, writes only via server`}
           </pre>
         </div>
       </div>

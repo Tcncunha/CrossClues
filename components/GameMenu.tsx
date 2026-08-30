@@ -11,7 +11,7 @@ interface Props {
 }
 
 const ui = {
-  en: { title: 'Entre Linhas', subtitle: 'Word Deduction Game', nameLabel: 'Your Name', namePlaceholder: 'Enter your name', createRoom: 'Deal a New Table', joinCode: 'Join with Code', codeLabel: 'Room Code', codePlaceholder: '4 digits', join: 'Take a Seat' },
+  en: { title: 'CrossClues', subtitle: 'Word Deduction Game', nameLabel: 'Your Name', namePlaceholder: 'Enter your name', createRoom: 'Deal a New Table', joinCode: 'Join with Code', codeLabel: 'Room Code', codePlaceholder: '4 digits', join: 'Take a Seat' },
   pt: { title: 'Entre Linhas', subtitle: 'Jogo de Deducao Palavras', nameLabel: 'Seu Nome', namePlaceholder: 'Digite seu nome', createRoom: 'Montar Nova Mesa', joinCode: 'Entrar com Codigo', codeLabel: 'Codigo da Sala', codePlaceholder: '4 digitos', join: 'Sentar a Mesa' },
 };
 

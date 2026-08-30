@@ -24,7 +24,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Entre Linhas | CrossLines - Word Deduction Game',
+  title: 'CrossClues - Word Deduction Game',
   description: 'A real-time multiplayer word deduction game | Jogo de deducao de palavras online',
 };
 

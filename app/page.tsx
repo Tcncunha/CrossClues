@@ -275,8 +275,13 @@ export default function GamePage() {
   };
 
   const handleSubmitClue = (clue: string) => {
-    if (!clue) return;
-    socketRef.current.emit('submit-clue', { clue }, (res: any) => {
+    const rawClue = String(clue).trim().slice(0, 15);
+    if (!rawClue || rawClue.includes(' ') || !/^[A-Za-zÀ-ÿ]+$/.test(rawClue)) {
+      showError('Dica deve ser uma palavra única (máx 15 letras, apenas letras)');
+      return;
+    }
+    const cleanClue = rawClue;
+    socketRef.current.emit('submit-clue', { clue: cleanClue }, (res: any) => {
       if (res.success) setSelectedClueCell(null);
       else showError(res.error);
     });
