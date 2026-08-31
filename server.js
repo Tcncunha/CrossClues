@@ -393,6 +393,17 @@ function checkAllRevealed(room) {
   return true;
 }
 
+function advanceTurnSkippingBots(room) {
+  if (!room.players.length) return;
+  let nextTurn = (room.currentTurn + 1) % room.players.length;
+  let attempts = 0;
+  while (attempts < room.players.length && room.players[nextTurn]?.id?.startsWith('bot_')) {
+    nextTurn = (nextTurn + 1) % room.players.length;
+    attempts++;
+  }
+  room.currentTurn = nextTurn;
+}
+
 /**
  * Remove a player from a room after the disconnect grace period expires.
  * Handles host reassignment, turn adjustment, and room cleanup.
@@ -723,11 +734,13 @@ app.prepare().then(() => {
       const currentPlayer = room.players[room.currentTurn];
       if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez' });
       if (!room.drawnCard) return callback({ success: false, error: 'Voce nao comprou uma carta' });
-      room.discardPile.push(room.drawnCard);
+      // Fix: return card to deck at random position instead of discarding permanently
+      // Previously: room.discardPile.push(room.drawnCard) caused card to disappear
+      room.cardDeck.splice(Math.floor(Math.random() * (room.cardDeck.length + 1)), 0, room.drawnCard);
       room.drawnCard = null;
       room.currentClue = null;
       room.groupGuessMade = false;
-      room.currentTurn = (room.currentTurn + 1) % room.players.length;
+      advanceTurnSkippingBots(room);
       io.to(room.code).emit('turn-passed', { passedBy: currentPlayer.name, currentTurn: room.currentTurn, currentPlayer: room.players[room.currentTurn]?.name });
       callback({ success: true });
     });

@@ -203,9 +203,9 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
                 </div>
                 {room.cols.map((_, j) => {
                   const cell = room.grid[i][j];
-                  const isActive = hasActiveClue && room.currentClue!.row === i && room.currentClue!.col === j;
-                  const isDrawnCardCell = drawnCard && drawnCard.row === i && drawnCard.col === j && !cell.revealed;
-                  const isSelectedHighlight = selectedClueCell && selectedClueCell.row === i && selectedClueCell.col === j;
+                  const isActiveForGiver = isClueGiver && hasActiveClue && room.currentClue!.row === i && room.currentClue!.col === j;
+                  const isDrawnCardCell = isClueGiver && drawnCard && drawnCard.row === i && drawnCard.col === j && !cell.revealed;
+                  const isSelectedHighlight = isClueGiver && selectedClueCell && selectedClueCell.row === i && selectedClueCell.col === j;
                   const isClickableGuess = hasActiveClue && !cell.revealed && !isClueGiver;
                   // Optional highlight click for clue giver: clicking drawn card cell just highlights (selection already auto-done)
                   const isClickableClueHighlight = isClueGiver && !hasActiveClue && isDrawnCardCell;
@@ -214,7 +214,7 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
 
                   if (cell.revealed) {
                     cellClass += ' bg-paper paper-grain border-success';
-                  } else if (isActive) {
+                  } else if (isActiveForGiver) {
                     cellClass += ' bg-warning/15 border-warning animate-pulse-border';
                   } else if (isDrawnCardCell) {
                     cellClass += ' bg-accent-light/10 border-accent-light animate-pulse-border';
@@ -264,7 +264,7 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
         </div>
 
         {/* Dock lateral inline — always visible */}
-        <aside className="w-full md:w-[280px] shrink-0 bg-bg-card rounded-card border border-border p-4 md:sticky md:top-[72px] flex flex-col gap-4 order-2 self-start">
+        <aside className="w-full md:w-[280px] md:min-w-[280px] max-w-full box-border overflow-hidden min-w-0 shrink-0 bg-bg-card rounded-card border border-border p-4 md:sticky md:top-[72px] flex flex-col gap-4 order-2 self-start">
           {/* ClueCard always visible */}
           <div className="flex flex-col items-center">
             <ClueCard label={clueCardLabel} rowWord={clueCardRowWord} colWord={clueCardColWord} state={clueCardState} />
@@ -289,14 +289,14 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
 
           {/* Clue input direct when isClueGiver && drawnCard */}
           {canGiveClue && (
-            <div className="flex flex-col gap-2" role="form" aria-label={t.clueFor}>
+            <div className="flex flex-col gap-2 min-w-0 max-w-full box-border overflow-hidden" role="form" aria-label={t.clueFor}>
               <h3 className="font-display text-sm font-bold text-accent-light">{t.clueFor}</h3>
-              <p className="text-sm font-bold text-accent-light">
+              <p className="text-sm font-bold text-accent-light break-words">
                 <span className="font-mono-label">{drawnCard!.label}</span> — {drawnCard!.rowWord} x {drawnCard!.colWord}
               </p>
-              <p className="text-text-secondary text-xs">{t.giveOneWord}</p>
+              <p className="text-text-secondary text-xs break-words">{t.giveOneWord}</p>
               <ClueRestrictions lang={lang} compact />
-              <div className="flex gap-2 mt-1">
+              <div className="flex gap-2 items-center w-full min-w-0 overflow-hidden mt-1 max-[320px]:flex-col max-[320px]:items-stretch">
                 <input
                   ref={inputRef}
                   type="text"
@@ -310,13 +310,13 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
                   maxLength={15}
                   aria-invalid={!!clueValidationError}
                   aria-describedby={clueValidationError ? 'clue-error' : undefined}
-                  className={`flex-1 px-3 py-2 bg-bg-primary border-2 rounded-cell text-text-primary text-sm outline-none transition-colors ${
+                  className={`flex-1 min-w-0 w-0 max-[320px]:w-full px-3 py-2 bg-bg-primary border-2 rounded-cell text-text-primary text-sm outline-none transition-colors box-border truncate ${
                     clueValidationError
                       ? 'border-error focus:border-error'
                       : 'border-border focus:border-accent-light'
                   }`}
                 />
-                <button onClick={handleSubmit} className="px-4 py-2 bg-accent hover:bg-accent-hover text-paper font-semibold rounded-cell transition-all text-sm">
+                <button onClick={handleSubmit} className="shrink-0 whitespace-nowrap min-w-[72px] max-[320px]:w-full px-4 py-2 bg-accent hover:bg-accent-hover text-paper font-semibold rounded-cell transition-all text-sm box-border">
                   {t.submit}
                 </button>
               </div>
@@ -325,7 +325,7 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
                   {getValidationMessage(clueValidationError, lang)}
                 </p>
               )}
-              <button onClick={onPassTurn} className="w-full mt-1 px-4 py-2 bg-bg-primary hover:bg-bg-cell-hover border-2 border-border text-text-secondary font-semibold rounded-cell transition-all text-xs">
+              <button onClick={onPassTurn} className="w-full max-w-full box-border mt-1 px-4 py-2 bg-bg-primary hover:bg-bg-cell-hover border-2 border-border text-text-secondary font-semibold rounded-cell transition-all text-xs whitespace-nowrap overflow-hidden text-ellipsis">
                 {t.passTurn}
               </button>
             </div>

@@ -29,9 +29,9 @@ export default function SelectCellDock({ gridSize, onGuess, activeClue, isClueGi
 
   const getLabel = (row: number, col: number) => `${colLetters[col]}${row + 1}`;
 
-  // hasClue highlight: if activeClue exists, highlight that single target cell
+  // hasClue highlight: visible only for clue giver — never reveal target cell to guessers
   const isHasClueCell = (row: number, col: number) =>
-    hasActiveClue && activeClue!.row === row && activeClue!.col === col;
+    isClueGiver && hasActiveClue && activeClue!.row === row && activeClue!.col === col;
 
   const cells: { row: number; col: number; label: string; hasClue: boolean }[] = [];
   for (let row = 0; row < safeSize; row++) {
