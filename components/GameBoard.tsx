@@ -92,9 +92,13 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
   }, [selectedClueCell, drawnCard]);
 
   const handleSubmit = () => {
-    const trimmed = clueInput.trim();
-    if (!trimmed) return;
-    onSubmitClue(trimmed);
+    const rawClue = String(clueInput).trim().slice(0, 15);
+    if (!rawClue || rawClue.includes(' ') || !/^[A-Za-zÀ-ÿ]+$/.test(rawClue)) {
+      // Invalid clue: single word required, max 15 letters
+      return;
+    }
+    const cleanClue = rawClue;
+    onSubmitClue(cleanClue);
     setClueInput('');
   };
 

@@ -1,4 +1,4 @@
-# CrossLines (Entre Linhas)
+# CrossClues (Entre Linhas)
 
 Jogo online multiplayer de deducao de palavras. Um jogador escolhe uma celula do grid e da uma dica que relaciona duas palavras (linha e coluna). Os demais jogadores tentam adivinhar qual celula a dica se refere.
 
@@ -6,7 +6,7 @@ Jogo online multiplayer de deducao de palavras. Um jogador escolhe uma celula do
 
 - Multiplayer em tempo real com Socket.IO
 - Salas com codigo de 4 digitos
-- 3 niveis de dificuldade (Facil, Medio, Dificil)
+- 3 difficulty levels (Easy / Medium / Hard) — level 1=easy, 2=medium, 3=hard
 - Grid de palavras gerado aleatoriamente
 - Sistema de pontuacao
 - Admin page para importar palavras
@@ -133,16 +133,21 @@ curl -X POST http://localhost:3000/api/import-words \
 ## Schema do Banco
 
 ```sql
-CREATE TABLE words (
-    id        INT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+CREATE TABLE public.words (
+    id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     word      VARCHAR(20) NOT NULL,
-    length    TINYINT NOT NULL,
-    language  CHAR(2) NOT NULL,
+    language  CHAR(2) NOT NULL CHECK (language IN ('EN','PT','ES','PL','ZH')),
+    level     SMALLINT NOT NULL CHECK (level BETWEEN 1 AND 3),
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (word, language)
 );
 
-CREATE INDEX idx_word_lookup ON words (language, length, is_active);
+CREATE INDEX idx_word_lookup ON public.words (language, level, is_active) WHERE is_active = true;
+
+ALTER TABLE public.words ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow read for anon" ON public.words FOR SELECT TO anon USING (is_active = true);
+-- service_role bypasses RLS
 ```
 
 ## Como Jogar

@@ -96,7 +96,7 @@ async function main() {
       const batch = words.slice(i, i + BATCH_SIZE).map(word => ({
         word,
         language: 'EN',
-        Level: level,
+        level: level,
         is_active: true,
       }));
 
