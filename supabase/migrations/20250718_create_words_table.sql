@@ -6,7 +6,7 @@
 -- 1. Cleanup legacy table/schema (B7) - keep both public (fallback) and CrossLinesGame (target)
 -- NÃO apaga public.words se vai usar fallback até expor CrossLinesGame via API
 -- DROP TABLE IF EXISTS "CrossLinesGame".words CASCADE;
-DROP TABLE IF EXISTS "CrossLinesGameDB"."words";
+DROP TABLE IF EXISTS "Public"."words";
 
 -- 1b. Ensure target schema exists (user expects CrossLinesGame, not public nor CrossLinesGameDB)
 CREATE SCHEMA IF NOT EXISTS "CrossLinesGame";
@@ -15,7 +15,7 @@ CREATE SCHEMA IF NOT EXISTS "CrossLinesGame";
 CREATE TABLE IF NOT EXISTS "CrossLinesGame".words (
   id BIGSERIAL PRIMARY KEY,
   word varchar(20) NOT NULL,
-  language char(2) NOT NULL CHECK (language IN ('EN','PT','ES','PL','ZH','AR')),
+  language char(2) NOT NULL CHECK (language IN ('EN','PT','ES','PL','ZH')),
   level smallint NOT NULL CHECK (level BETWEEN 1 AND 3),
   is_active boolean DEFAULT true,
   created_at timestamptz DEFAULT now(),
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS "CrossLinesGame".words (
 CREATE TABLE IF NOT EXISTS public.words (
   id BIGSERIAL PRIMARY KEY,
   word varchar(20) NOT NULL,
-  language char(2) NOT NULL CHECK (language IN ('EN','PT','ES','PL','ZH','AR')),
+  language char(2) NOT NULL CHECK (language IN ('EN','PT','ES','PL','ZH')),
   level smallint NOT NULL CHECK (level BETWEEN 1 AND 3),
   is_active boolean DEFAULT true,
   created_at timestamptz DEFAULT now(),
