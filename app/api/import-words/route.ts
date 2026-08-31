@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
+
+export const runtime = 'nodejs';
 
 let _supabase: SupabaseClient | null = null;
 function getSupabase(): SupabaseClient {
   if (!_supabase) {
     _supabase = createClient(
       process.env.SUPABASE_URL!,
-      process.env.SUPABASE_KEY!
+      (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_KEY)!
     );
   }
   return _supabase;
@@ -69,26 +73,64 @@ async function fetchRandomWords(count: number): Promise<string[]> {
     const needed = count - words.length;
     const batchSize = Math.min(BATCH_SIZE, needed);
 
-    const res = await fetch(
-      `https://random-word-api.vercel.app/api?words=${batchSize}`
-    );
+    try {
+      const res = await fetch(`https://random-word-api.vercel.app/api?words=${batchSize}`);
 
-    if (!res.ok) {
-      throw new Error(`Random Word API error: ${res.status}`);
-    }
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Random Word API ${res.status} ${body.slice(0,120)}`);
+      }
 
-    const data: string[] = await res.json();
-
-    for (const w of data) {
-      const upper = w.toUpperCase();
-      if (!seen.has(upper) && upper.length <= 20 && /^[A-Z]+$/.test(upper)) {
-        seen.add(upper);
-        words.push(upper);
+      const data: string[] = await res.json();
+      for (const w of data) {
+        const upper = w.toUpperCase();
+        if (!seen.has(upper) && upper.length <= 20 && /^[A-Z]+$/.test(upper)) {
+          seen.add(upper);
+          words.push(upper);
+        }
+      }
+      continue; // sucesso, proxima iteracao
+    } catch (err) {
+      console.warn('[import-words] API falhou, usando fallback public/words.json:', (err as Error).message);
+      // Fallback: lê public/words.json local
+      try {
+        const filePath = path.join(process.cwd(), 'public', 'words.json');
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const json = JSON.parse(raw);
+        const pool: string[] = [];
+        for (const lang of Object.keys(json)) {
+          const entry = json[lang];
+          if (entry.easy) pool.push(...entry.easy);
+          if (entry.medium) pool.push(...entry.medium);
+          if (entry.hard) pool.push(...entry.hard);
+        }
+        // embaralha pool
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        for (const w of pool) {
+          if (words.length >= count) break;
+          const upper = w.toUpperCase();
+          if (!seen.has(upper) && /^[A-Z]+$/.test(upper)) {
+            seen.add(upper);
+            words.push(upper);
+          }
+        }
+        // se ainda faltar, completa com palavras sintéticas
+        let n = 1;
+        while (words.length < count) {
+          const synth = `WORD${n++}`;
+          if (!seen.has(synth)) { seen.add(synth); words.push(synth); }
+        }
+        break; // fallback resolveu, sai do while
+      } catch (fallbackErr) {
+        throw new Error(`API falhou (${(err as Error).message}) e fallback public/words.json também falhou: ${(fallbackErr as Error).message}`);
       }
     }
   }
 
-  return words;
+  return words.slice(0, count);
 }
 
 export async function POST(request: Request) {
@@ -129,9 +171,9 @@ export async function POST(request: Request) {
         .select();
 
       if (error) {
-        console.error('Supabase insert error:', error);
+        console.error('Supabase insert error (public):', error);
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: `Supabase public.words: ${error.message} (code ${error.code})` },
           { status: 500 }
         );
       }

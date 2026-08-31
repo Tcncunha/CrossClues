@@ -394,7 +394,7 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-5">
-      <div className={`w-full animate-fade-in ${screen === 'game' ? 'max-w-2xl h-[100dvh] flex flex-col' : 'max-w-2xl'}`}>
+      <div className={`w-full animate-fade-in ${screen === 'game' ? 'max-w-[960px] h-[100dvh] flex flex-col' : 'max-w-2xl'}`}>
         {screen === 'welcome' && (
           <WelcomePage onPlay={() => setScreen('menu')} lang={lang} onLangChange={setLang} />
         )}

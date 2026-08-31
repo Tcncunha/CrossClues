@@ -16,7 +16,7 @@ const handle = app.getRequestHandler();
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_KEY
 );
 
 const { z } = require('zod');
@@ -29,7 +29,7 @@ const MIN_PLAYERS_TO_START = 2;
 const VALID_DIFFICULTIES = ['easy', 'medium', 'hard'];
 const DIFFICULTY_MAP = { easy: 1, medium: 2, hard: 3 };
 const LEGACY_DIFFICULTY_MAP = { facil: 'easy', medio: 'medium', dificil: 'hard' };
-const VALID_LANGUAGES = ['EN', 'PT', 'ES', 'PL', 'ZH'];
+const VALID_LANGUAGES = ['EN', 'PT', 'ES', 'PL', 'ZH', 'AR'];
 
 const selectClueSchema = z.object({
   row: z.number().int().min(0).max(4),
@@ -437,7 +437,7 @@ app.prepare().then(() => {
   });
 
   // Security middleware
-  server.use(helmet());
+  server.use(helmet({ contentSecurityPolicy: false }));
   server.use(cors());
   server.use(express.json({ limit: '10kb' }));
 
