@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_KEY!
-);
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_KEY!
+    );
+  }
+  return _supabase;
+}
 
 const BATCH_SIZE = 50;
 
@@ -65,7 +71,7 @@ export async function POST(request: Request) {
     for (let i = 0; i < entries.length; i += BATCH_SIZE) {
       const batch = entries.slice(i, i + BATCH_SIZE);
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('words')
         .upsert(batch, { onConflict: 'word,language', ignoreDuplicates: true })
         .select();
@@ -98,7 +104,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const { data, error, count } = await supabase
+    const { data, error, count } = await getSupabase()
       .from('words')
       .select('*', { count: 'exact' })
       .eq('language', 'EN')

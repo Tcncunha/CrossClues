@@ -39,11 +39,16 @@ Jogo online multiplayer de deducao de palavras. Um jogador escolhe uma celula do
 │   ├── GameMenu.tsx          # Menu inicial
 │   ├── GameConfig.tsx        # Configuracao da sala
 │   ├── GameLobby.tsx         # Sala de espera
-│   ├── GameBoard.tsx         # Tabuleiro do jogo
+│   ├── GameBoard.tsx         # Tabuleiro do jogo (com validacao de dicas)
+│   ├── ClueRestrictions.tsx  # Regras de restricao de dicas
 │   ├── GameOver.tsx          # Tela de fim de jogo
-│   └── ResultModal.tsx       # Modal de resultado
+│   ├── ResultModal.tsx       # Modal de resultado
+│   ├── RulesPage.tsx         # Pagina de regras
+│   └── ScoringTable.tsx      # Tabela de pontuacao
 ├── lib/
-│   └── socket.ts             # Cliente Socket.IO
+│   ├── socket.ts             # Cliente Socket.IO
+│   ├── validation.ts         # Validacao client-side de dicas (EN/PT)
+│   └── rules.ts              # Regras do jogo
 ├── scripts/
 │   └── import-words.js       # Script CLI para importar palavras
 ├── supabase/
@@ -92,8 +97,11 @@ PORT=3000
 ## Execucao
 
 ```bash
-# Iniciar o servidor
+# Iniciar o servidor (desenvolvimento)
 npm start
+
+# Ou com NODE_ENV=production
+NODE_ENV=production npm start
 
 # Acessar o jogo
 # http://localhost:3000
@@ -101,6 +109,43 @@ npm start
 # Acessar o admin
 # http://localhost:3000/admin
 ```
+
+## Build e Verificacao
+
+```bash
+# Type check (tipagem)
+npx tsc --noEmit
+
+# Build de producao (Next.js / Turbopack)
+npx next build
+```
+
+> **Nota:** O endpoint `/api/import-words` inicializa o cliente Supabase de forma
+> lazy, entao o build nao exige credenciais do Supabase para rodar.
+
+## Validacao de Dicas (US-01 / US-02 / US-03)
+
+As dicas passam por duas camadas de validacao:
+
+### Client-side (`lib/validation.ts`)
+`validateClueLocal()` impede envios invalidos antes de irem ao servidor, com mensagens EN/PT:
+1. Nao pode ser vazia ou so espacos
+2. Deve ser uma unica palavra (sem espacos)
+3. Nao pode conter hifen (palavra composta)
+4. Nao pode ser apenas numeros
+5. Nao pode ser uma sigla de 2-3 letras maiusculas (ex.: "USA")
+6. Maximo 15 caracteres
+
+### Server-side (`server.js` → `validateClue`)
+*Validacao de autoridade no servidor* antes de persistir a dica:
+- Mesmas regras da validacao client-side (nao confiar so no cliente)
+- Controle de turno (`notYourTurn`)
+- **Sanitizacao XSS** (`/[\<\>\"\'&]/`) — rejeita `<`, `>`, `"`, `'`, `&` (bug M3)
+- Persistencia da dica sempre com `.trim()` (bug m2)
+
+### Acessibilidade (bug m4)
+O campo de dica usa `aria-invalid` e `aria-describedby` apontando para o
+elemento de erro com `role="alert"` e `aria-live="assertive"`.
 
 ## Importar Palavras
 

@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Room } from '@/app/page';
+import ClueRestrictions from '@/components/ClueRestrictions';
+import { validateClueLocal, getValidationMessage, type ClueValidationErrorCode } from '@/lib/validation';
 
 interface Props {
   room: Room;
@@ -69,6 +71,7 @@ function initials(name: string) {
 
 export default function GameBoard({ room, playerId, selectedClueCell, onSelectCell, onSubmitClue, onGuessCell, onDrawCard, onPassTurn, onLeaveRoom, drawnCard, isClueGiver, getMyIndex, lang, error }: Props) {
   const [clueInput, setClueInput] = useState('');
+  const [clueValidationError, setClueValidationError] = useState<ClueValidationErrorCode | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const t = ui[lang];
 
@@ -89,11 +92,23 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
 
   useEffect(() => {
     setClueInput('');
+    setClueValidationError(null);
   }, [selectedClueCell, drawnCard]);
 
   const handleSubmit = () => {
     const trimmed = clueInput.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setClueValidationError('empty');
+      return;
+    }
+
+    const validationError = validateClueLocal(clueInput);
+    if (validationError) {
+      setClueValidationError(validationError);
+      return;
+    }
+
+    setClueValidationError(null);
     onSubmitClue(trimmed);
     setClueInput('');
   };
@@ -279,21 +294,36 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
               <span className="font-mono-label">{getCellLabel(selectedClueCell.row, selectedClueCell.col)}</span> — {selectedClueCell.rowWord} × {selectedClueCell.colWord}
             </p>
             <p className="text-text-secondary text-xs mb-3">{t.giveOneWord}</p>
-            <div className="flex gap-2">
+            <ClueRestrictions lang={lang} compact />
+            <div className="flex gap-2 mt-3">
               <input
                 ref={inputRef}
                 type="text"
                 value={clueInput}
-                onChange={e => setClueInput(e.target.value)}
+                onChange={e => {
+                  setClueInput(e.target.value);
+                  if (clueValidationError) setClueValidationError(null);
+                }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
                 placeholder={t.yourClue}
                 maxLength={15}
-                className="flex-1 px-3 py-2 bg-bg-primary border-2 border-border rounded-cell text-text-primary text-sm outline-none focus:border-accent-light transition-colors"
+                aria-invalid={!!clueValidationError}
+                aria-describedby={clueValidationError ? 'clue-error' : undefined}
+                className={`flex-1 px-3 py-2 bg-bg-primary border-2 rounded-cell text-text-primary text-sm outline-none transition-colors ${
+                  clueValidationError
+                    ? 'border-error focus:border-error'
+                    : 'border-border focus:border-accent-light'
+                }`}
               />
               <button onClick={handleSubmit} className="px-4 py-2 bg-accent hover:bg-accent-hover text-paper font-semibold rounded-cell transition-all text-sm">
                 {t.submit}
               </button>
             </div>
+            {clueValidationError && (
+              <p id="clue-error" className="mt-2 text-error text-xs text-center animate-shake" role="alert" aria-live="assertive">
+                {getValidationMessage(clueValidationError, lang)}
+              </p>
+            )}
             <button onClick={onPassTurn} className="w-full mt-2 px-4 py-2 bg-bg-primary hover:bg-bg-cell-hover border-2 border-border text-text-secondary font-semibold rounded-cell transition-all text-xs">
               {t.passTurn}
             </button>

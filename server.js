@@ -16,6 +16,114 @@ const supabase = createClient(
 
 const wordCache = {};
 
+// ── Clue Validation (US-02 / US-03) ──────────────────────────────────────────
+// Error messages indexed by key, supporting EN and PT locales.
+
+const CLUE_VALIDATION_ERRORS = {
+  empty: {
+    EN: 'Type a word first',
+    PT: 'Digite uma palavra primeiro',
+  },
+  multipleWords: {
+    EN: 'Clue must be a single word',
+    PT: 'A dica deve ser uma única palavra',
+  },
+  number: {
+    EN: 'Clue cannot be a number',
+    PT: 'A dica não pode ser um número',
+  },
+  abbreviation: {
+    EN: 'Clue cannot be an abbreviation',
+    PT: 'A dica não pode ser uma sigla',
+  },
+  compoundWord: {
+    EN: 'Clue cannot be a compound word',
+    PT: 'A dica não pode ser palavra composta',
+  },
+  tooLong: {
+    EN: 'Clue is too long (max 15 characters)',
+    PT: 'Dica muito longa (máximo 15 caracteres)',
+  },
+  notYourTurn: {
+    EN: "It's not your turn",
+    PT: 'Não é sua vez',
+  },
+  maliciousInput: {
+    EN: 'Clue contains invalid characters',
+    PT: 'A dica contém caracteres inválidos',
+  },
+};
+
+/**
+ * Returns a localized error message from CLUE_VALIDATION_ERRORS.
+ *
+ * @param {string} key      - Error key (e.g. 'empty', 'notYourTurn')
+ * @param {string} language - 'EN' or 'PT'
+ * @returns {string}
+ */
+function getClueError(key, language = 'PT') {
+  const lang = language === 'EN' ? 'EN' : 'PT';
+  return CLUE_VALIDATION_ERRORS[key][lang];
+}
+
+/**
+ * Validates a clue on the server side before persisting.
+ *
+ * Hard rules (US-02):
+ *  1. Must be a single word (no spaces)
+ *  2. Cannot be a pure number
+ *  3. Cannot be a 2-3 char uppercase abbreviation (e.g. "USA", "NYC")
+ *  4. Cannot be a compound word (contains hyphen)
+ *  5. Maximum 15 characters
+ *  6. Must not be empty / whitespace only
+ *
+ * @param {string} clue   - The raw clue string from the client
+ * @param {string} language - 'EN' or 'PT' (controls error message language)
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validateClue(clue, language = 'PT') {
+  const lang = language === 'EN' ? 'EN' : 'PT';
+  const getError = (key) => getClueError(key, lang);
+
+  if (!clue || typeof clue !== 'string') {
+    return { valid: false, error: getError('empty') };
+  }
+
+  const trimmed = clue.trim();
+
+  if (trimmed.length === 0) {
+    return { valid: false, error: getError('empty') };
+  }
+
+  // Rule 1: Single word only
+  const wordCount = trimmed.split(/\s+/).length;
+  if (wordCount !== 1) {
+    return { valid: false, error: getError('multipleWords') };
+  }
+
+  // Rule 2: Not a pure number
+  if (/^\d+$/.test(trimmed)) {
+    return { valid: false, error: getError('number') };
+  }
+
+  // Rule 3: Not an abbreviation (2-3 uppercase chars)
+  if (/^[A-Z]{2,3}$/.test(trimmed)) {
+    return { valid: false, error: getError('abbreviation') };
+  }
+
+  // Rule 4 (bonus from error table): No compound words with hyphens
+  if (trimmed.includes('-')) {
+    return { valid: false, error: getError('compoundWord') };
+  }
+
+  // Rule 5: Max 15 characters
+  if (trimmed.length > 15) {
+    return { valid: false, error: getError('tooLong') };
+  }
+
+  return { valid: true };
+}
+
 async function loadWordsByLanguage(language) {
   if (wordCache[language]) return wordCache[language];
 
@@ -346,15 +454,37 @@ app.prepare().then(() => {
 
     socket.on('submit-clue', ({ clue }, callback) => {
       const room = rooms.get(socket.roomCode);
-      if (!room || room.state !== 'playing' || !room.currentClue) return callback({ success: false, error: 'Sem dica ativa' });
+      if (!room || room.state !== 'playing' || !room.currentClue) {
+        return callback({ success: false, error: 'Sem dica ativa' });
+      }
+
+      // Turn check — only the current player can submit a clue
       const currentPlayer = room.players[room.currentTurn];
-      if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez' });
+      if (!currentPlayer || currentPlayer.id !== socket.id) {
+        return callback({ success: false, error: getClueError('notYourTurn', room.wordLanguage) });
+      }
+
+      // Server-side clue validation (US-02 / US-03)
+      const validation = validateClue(clue, room.wordLanguage);
+      if (!validation.valid) {
+        console.log(`[VALIDATION] Clue rejected for ${currentPlayer.name}: "${clue}" → ${validation.error}`);
+        return callback({ success: false, error: validation.error });
+      }
+
+      // Sanitize: reject HTML/XSS characters that passed text validation
+      const SANITIZE_REGEX = /[<>"'&]/;
+      if (SANITIZE_REGEX.test(clue.trim())) {
+        console.log(`[SECURITY] Malicious input rejected for ${currentPlayer.name}: "${clue}"`);
+        return callback({ success: false, error: getClueError('maliciousInput', room.wordLanguage) });
+      }
+
+      // Persist the validated clue
       const { row, col } = room.currentClue;
-      room.grid[row][col].clue = clue;
+      room.grid[row][col].clue = clue.trim();
       room.grid[row][col].clueBy = currentPlayer.name;
       room.cluesGiven++;
       room.drawnCard = null;
-      io.to(room.code).emit('clue-given', { row, col, clue, clueBy: currentPlayer.name });
+      io.to(room.code).emit('clue-given', { row, col, clue: clue.trim(), clueBy: currentPlayer.name });
       callback({ success: true });
     });
 
