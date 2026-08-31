@@ -620,9 +620,9 @@ app.prepare().then(() => {
     });
 
     // ── START GAME ───────────────────────────────────────────────────────────
-    socket.on('start-game', async (callback) => {
+    socket.on('start-game' /* DIAG */, async (callback) => {
       const room = rooms.get(socket.roomCode);
-      if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
+      console.log('DIAG start-game IN, callback=', typeof callback); if (room && room.host !== socket.id) { console.log('DIAG not host, socket=',socket.id,'host=',room.host); } if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
 
       // US-001: minimum 2 players
       if (room.players.length < MIN_PLAYERS_TO_START) {
@@ -633,7 +633,7 @@ app.prepare().then(() => {
       room.difficulty = sanitizeDifficulty(room.difficulty);
       room.wordLanguage = sanitizeWordLanguage(room.wordLanguage);
 
-      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      console.log('DIAG before await'); const wordLists = await loadWordsByLanguage(room.wordLanguage);
       const words = wordLists[room.difficulty] || wordLists.medium;
 
       // B2: Validate minimum words available
@@ -887,9 +887,9 @@ app.prepare().then(() => {
     // ── RESTART GAME ─────────────────────────────────────────────────────────
     socket.on('restart-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
-      if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
+      console.log('DIAG start-game IN, callback=', typeof callback); if (room && room.host !== socket.id) { console.log('DIAG not host, socket=',socket.id,'host=',room.host); } if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
 
-      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      console.log('DIAG before await'); const wordLists = await loadWordsByLanguage(room.wordLanguage);
       const words = wordLists[room.difficulty] || wordLists.medium;
 
       // B2: Validate minimum words
@@ -982,3 +982,4 @@ app.prepare().then(() => {
     console.log(`=================================`);
   });
 });
+

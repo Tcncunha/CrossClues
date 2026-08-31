@@ -1,0 +1,65 @@
+{
+  "EN": {
+    "easy": [
+      "cat", "dog", "sun", "moon", "tree", "house", "car", "book", "fish", "bird",
+      "door", "hand", "foot", "eye", "ear", "nose", "mouth", "face", "head", "arm",
+      "leg", "bed", "cup", "hat", "box", "key", "pen", "map", "ball", "egg",
+      "rain", "snow", "fire", "wind", "star", "wave", "seed", "root", "leaf", "stone",
+      "milk", "rice", "salt", "cake", "soap", "drum", "bell", "gold", "iron", "silk"
+    ],
+    "medium": [
+      "garden", "bridge", "island", "market", "castle", "shadow", "mirror", "forest",
+      "winter", "harvest", "thunder", "carnival", "journey", "puzzle", "riddle", "blanket",
+      "feather", "diamond", "furnace", "highway", "luggage", "oracle", "panther", "rainbow",
+      "cabinet", "lantern", "crystal", "velvet", "marble", "serpent", "comet", "fossil",
+      "harbor", "mosaic", "tundra", "summit", "harvest", "beacon", "anchor", "cipher",
+      "dagger", "emerald", "galaxy", "horizon", "jasmine", "kingdom", "legend", "mineral",
+      "nebula", "obsidian", "phoenix", "quartz"
+    ],
+    "hard": [
+      "algorithm", "bureaucracy", "constellation", "hypothesis", "jurisdiction",
+      "metamorphosis", "orchestration", "philosophical", "sustainable", "transparent",
+      "vulnerability", "circumference", "accountability", "autobiography", "chronological",
+      "deterioration", "electromagnetic", "entrepreneurial", "gastrointestinal",
+      "infrastructure", "juxtaposition", "kaleidoscope", "magnificent", "nevertheless",
+      "overwhelming", "parliamentary", "quintessential", "rehabilitation", "sophisticated",
+      "tripartite", "ultraviolet", "visualization", "whistleblower", "xylophonist",
+      "yearbook", "archaeological", "bioluminescence", "catharsis", "doppelganger",
+      "equivocate", "fluorescent", "grandiloquent", "hemorrhage", "idiosyncratic",
+      "juxtapose", "loquacious", "magnanimous", "nonchalant", "obsequious",
+      "perspicacious", "quiescent"
+    ]
+  },
+  "PT": {
+    "easy": [
+      "gato", "sol", "lua", "mar", "ceu", "chuva", "pedra", "mao", "pe", "olho",
+      "ouvido", "nariz", "boca", "rosto", "cabeca", "braco", "perna", "cama", "copo",
+      "chave", "porta", "janela", "mesa", "cadeira", "livro", "papel", "caneta",
+      "bola", "ovo", "sapato", "nuvem", "rio", "monte", "prato", "faca", "garfo",
+      "colher", "farinha", "carne", "peixe", "fruta", "legume", "amigo", "mestre",
+      "vento", "neve", "ferro", "ouro", "prata", "seda", "algodao"
+    ],
+    "medium": [
+      "jardim", "ponte", "ilha", "vulcao", "mercado", "castelo", "trono", "sombra",
+      "espelho", "floresta", "inverno", "trovao", "carnaval", "viagem", "cobertor",
+      "diamante", "fornalha", "estrada", "bagagem", "oraculo", "arcoiris", "cristal",
+      "veludo", "marmore", "serpente", "cometa", "fosil", "porto", "mosaico", "cume",
+      "farol", "ancora", "cifra", "adaga", "esmeralda", "galaxia", "horizonte",
+      "jasmim", "reino", "lenda", "mineral", "nebulosa", "obsidiana", "fenix",
+      "quartzo", "bengala", "candelabro", "dragao", "esfinxe", "golfinho"
+    ],
+    "hard": [
+      "algoritmo", "burocracia", "constelacao", "hipotese", "jurisdicao",
+      "metamorfose", "orquestracao", "filosofico", "sustentavel", "transparente",
+      "vulnerabilidade", "circunferencia", "responsabilidade", "autobiografia",
+      "cronologico", "deterioracao", "eletromagnetico", "empreendedor",
+      "gastrointestinal", "infraestrutura", "justaposicao", "caleidoscopio",
+      "magnifico", "obviamente", "parlamentar", "quintessencia", "reabilitacao",
+      "sofisticado", "tripartite", "ultravioleta", "visualizacao", "denunciante",
+      "arqueologico", "bioluminescencia", "catarse", "sosia", "ambiguidade",
+      "fluorescente", "grandilocuencia", "hemorragia", "idiossincrasia",
+      "justapor", "locuacao", "magnanimidade", "descontraido", "obssequioso",
+      "perspicaz", "quiescente"
+    ]
+  }
+}

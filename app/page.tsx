@@ -59,6 +59,47 @@ const errText = {
   pt: { enterName: 'Digite seu nome', codeDigits: 'Codigo deve ter 4 digitos' },
 };
 
+// localStorage keys for reconnection persistence
+const STORAGE_KEYS = {
+  roomCode: 'crossclues_roomCode',
+  playerId: 'crossclues_playerId',
+  playerName: 'crossclues_playerName',
+} as const;
+
+function saveSessionToStorage(roomCode: string, playerId: string, playerName: string) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.roomCode, roomCode);
+    localStorage.setItem(STORAGE_KEYS.playerId, playerId);
+    localStorage.setItem(STORAGE_KEYS.playerName, playerName);
+  } catch {
+    // localStorage may be unavailable; ignore
+  }
+}
+
+function clearSessionFromStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.roomCode);
+    localStorage.removeItem(STORAGE_KEYS.playerId);
+    localStorage.removeItem(STORAGE_KEYS.playerName);
+  } catch {
+    // ignore
+  }
+}
+
+function loadSessionFromStorage(): { roomCode: string; playerId: string; playerName: string } | null {
+  try {
+    const roomCode = localStorage.getItem(STORAGE_KEYS.roomCode);
+    const playerId = localStorage.getItem(STORAGE_KEYS.playerId);
+    const playerName = localStorage.getItem(STORAGE_KEYS.playerName);
+    if (roomCode && playerId && playerName) {
+      return { roomCode, playerId, playerName };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export default function GamePage() {
   const socketRef = useRef(getSocket());
   const [screen, setScreen] = useState<Screen>('welcome');
@@ -143,7 +184,7 @@ export default function GamePage() {
         return { ...prev, grid: newGrid, currentClue: null };
       });
       const m = modalText[lang];
-      setModal({ icon: '❌', title: m.wrong, detail: m.wrongDetail });
+      setModal({ icon: '\u274C', title: m.wrong, detail: m.wrongDetail });
       setTimeout(() => setModal(null), 1500);
     });
 
@@ -154,7 +195,6 @@ export default function GamePage() {
     });
 
     socket.on('card-drawn', (data: { cardLabel: string; cardRow: number; cardCol: number; rowWord: string; colWord: string; drawnBy: string; deckCount: number }) => {
-      console.log('[DEBUG] card-drawn received (private):', data);
       setRoom(prev => prev ? { ...prev, cardDeckCount: data.deckCount } : prev);
       setDrawnCard({ row: data.cardRow, col: data.cardCol, label: data.cardLabel, rowWord: data.rowWord, colWord: data.colWord });
     });
@@ -183,10 +223,34 @@ export default function GamePage() {
       setRoom(data.room);
     });
 
+    // US-009: Handle reconnection
+    socket.on('connect', () => {
+      const savedSession = loadSessionFromStorage();
+      if (savedSession) {
+        socket.emit('rejoin-room', {
+          roomCode: savedSession.roomCode,
+          playerId: savedSession.playerId,
+          playerName: savedSession.playerName,
+        }, (response: { success: boolean; room?: Room; player?: Player; error?: string }) => {
+          if (response.success && response.room && response.player) {
+            setRoom(response.room);
+            setPlayer(response.player);
+            // Restore the correct screen based on room state
+            if (response.room.state === 'waiting') setScreen('lobby');
+            else if (response.room.state === 'playing') setScreen('game');
+            else if (response.room.state === 'finished') setScreen('gameover');
+          } else {
+            // Reconnection failed, clear saved session
+            clearSessionFromStorage();
+          }
+        });
+      }
+    });
+
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateRoom = (name: string) => {
     if (!name) return showError(errText[lang].enterName);
@@ -197,39 +261,35 @@ export default function GamePage() {
   const handleJoinRoom = (name: string, code: string) => {
     if (!name) return showError(errText[lang].enterName);
     if (!code || code.length !== 4) return showError(errText[lang].codeDigits);
-    socketRef.current.emit('join-room', { roomCode: code, playerName: name }, (res: any) => {
-      if (res.success) {
+    socketRef.current.emit('join-room', { roomCode: code, playerName: name }, (res: { success: boolean; room?: Room; player?: Player; error?: string }) => {
+      if (res.success && res.room && res.player) {
         setRoom(res.room);
         setPlayer(res.player);
         setScreen('lobby');
+        saveSessionToStorage(res.room.code, res.player.id, res.player.name);
       } else {
-        showError(res.error);
+        showError(res.error ?? 'Failed to join room');
       }
     });
   };
 
   const handleConfirmCreate = (difficulty: string, gridSize: number, wordLanguage: string) => {
     const name = player?.name || '';
-    socketRef.current.emit('create-room', { playerName: name, difficulty, gridSize, wordLanguage }, (res: any) => {
-      if (res.success) {
+    socketRef.current.emit('create-room', { playerName: name, difficulty, gridSize, wordLanguage }, (res: { success: boolean; room?: Room; player?: Player; error?: string }) => {
+      if (res.success && res.room && res.player) {
         setRoom(res.room);
         setPlayer(res.player);
         setScreen('lobby');
+        saveSessionToStorage(res.room.code, res.player.id, res.player.name);
       } else {
-        showError(res.error);
+        showError(res.error ?? 'Failed to create room');
       }
     });
   };
 
   const handleStartGame = () => {
-    socketRef.current.emit('start-game', (res: any) => {
-      if (!res.success) showError(res.error);
-    });
-  };
-
-  const handleAddTestPlayer = () => {
-    socketRef.current.emit('add-test-player', (res: any) => {
-      if (!res.success) showError(res.error);
+    socketRef.current.emit('start-game', (res: { success: boolean; error?: string }) => {
+      if (!res.success) showError(res.error ?? 'Failed to start game');
     });
   };
 
@@ -248,42 +308,40 @@ export default function GamePage() {
     const cellData = room.grid[row][col];
     if (cellData.revealed || cellData.clue) return;
     setSelectedClueCell({ row, col, rowWord: cellData.rowWord, colWord: cellData.colWord });
-    socketRef.current.emit('select-clue-cell', { row, col }, (res: any) => {
+    socketRef.current.emit('select-clue-cell', { row, col }, (res: { success: boolean; error?: string }) => {
       if (!res.success) {
-        showError(res.error);
+        showError(res.error ?? 'Failed to select cell');
         setSelectedClueCell(null);
       }
     });
   };
 
   const handleDrawCard = () => {
-    console.log('[DEBUG] Drawing card...');
-    socketRef.current.emit('draw-card', (res: any) => {
-      console.log('[DEBUG] draw-card response:', res);
+    socketRef.current.emit('draw-card', (res: { success: boolean; error?: string }) => {
       if (!res.success) {
-        showError(res.error);
+        showError(res.error ?? 'Failed to draw card');
       }
     });
   };
 
   const handlePassTurn = () => {
-    socketRef.current.emit('pass-turn', (res: any) => {
+    socketRef.current.emit('pass-turn', (res: { success: boolean; error?: string }) => {
       if (!res.success) {
-        showError(res.error);
+        showError(res.error ?? 'Failed to pass turn');
       }
     });
   };
 
   const handleSubmitClue = (clue: string) => {
     const rawClue = String(clue).trim().slice(0, 15);
-    if (!rawClue || rawClue.includes(' ') || !/^[A-Za-zÀ-ÿ]+$/.test(rawClue)) {
-      showError('Dica deve ser uma palavra única (máx 15 letras, apenas letras)');
+    if (!rawClue || rawClue.includes(' ') || !/^[A-Za-z\u00C0-\u00FF]+$/.test(rawClue)) {
+      showError('Clue must be a single word (max 15 letters, letters only)');
       return;
     }
     const cleanClue = rawClue;
-    socketRef.current.emit('submit-clue', { clue: cleanClue }, (res: any) => {
+    socketRef.current.emit('submit-clue', { clue: cleanClue }, (res: { success: boolean; error?: string }) => {
       if (res.success) setSelectedClueCell(null);
-      else showError(res.error);
+      else showError(res.error ?? 'Failed to submit clue');
     });
   };
 
@@ -291,27 +349,28 @@ export default function GamePage() {
     if (!room || isClueGiver() || !room.currentClue) return;
     const cellData = room.grid[row][col];
     if (cellData.revealed) return;
-    socketRef.current.emit('guess-cell', { row, col }, (res: any) => {
-      if (!res.success) return showError(res.error);
+    socketRef.current.emit('guess-cell', { row, col }, (res: { success: boolean; correct?: boolean; error?: string }) => {
+      if (!res.success) return showError(res.error ?? 'Failed to guess');
       if (res.correct) {
         const m = modalText[lang];
-        setModal({ icon: '✅', title: m.correct, detail: m.correctDetail });
+        setModal({ icon: '\u2705', title: m.correct, detail: m.correctDetail });
         setTimeout(() => setModal(null), 1500);
       } else {
         const m = modalText[lang];
-        setModal({ icon: '❌', title: m.wrong, detail: m.wrongPos });
+        setModal({ icon: '\u274C', title: m.wrong, detail: m.wrongPos });
         setTimeout(() => setModal(null), 1500);
       }
     });
   };
 
   const handleRestart = () => {
-    socketRef.current.emit('restart-game', (res: any) => {
-      if (!res.success) showError(res.error);
+    socketRef.current.emit('restart-game', (res: { success: boolean; error?: string }) => {
+      if (!res.success) showError(res.error ?? 'Failed to restart');
     });
   };
 
   const handleBackToMenu = () => {
+    clearSessionFromStorage();
     socketRef.current.disconnect();
     socketRef.current = getSocket();
     socketRef.current.connect();
@@ -323,7 +382,8 @@ export default function GamePage() {
   };
 
   const handleLeaveRoom = () => {
-    socketRef.current.emit('leave-room', (res: any) => {
+    clearSessionFromStorage();
+    socketRef.current.emit('leave-room', (res: { success: boolean }) => {
       setRoom(null);
       setPlayer(null);
       setSelectedClueCell(null);
@@ -356,7 +416,6 @@ export default function GamePage() {
             playerId={socketRef.current.id!}
             onStartGame={handleStartGame}
             onCopyCode={handleCopyCode}
-            onAddTestPlayer={handleAddTestPlayer}
             copied={copied}
             lang={lang}
           />
@@ -374,7 +433,6 @@ export default function GamePage() {
             onLeaveRoom={handleLeaveRoom}
             drawnCard={drawnCard}
             isClueGiver={isClueGiver()}
-            getMyIndex={getMyIndex}
             lang={lang}
             error={error}
           />

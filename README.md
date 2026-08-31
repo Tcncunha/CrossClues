@@ -6,9 +6,11 @@ Jogo online multiplayer de deducao de palavras. Um jogador escolhe uma celula do
 
 - Multiplayer em tempo real com Socket.IO
 - Salas com codigo de 4 digitos
-- 3 difficulty levels (Easy / Medium / Hard) — level 1=easy, 2=medium, 3=hard
+- 3 difficulty levels (Easy / Medium / Hard) -- level 1=easy, 2=medium, 3=hard
 - Grid de palavras gerado aleatoriamente
-- Sistema de pontuacao
+- Pontuacao cooperativa por equipe
+- Reconexao com grace period de 30s
+- Palavras fallback locais (sem Supabase)
 - Admin page para importar palavras
 - Integracao com Supabase
 
@@ -55,14 +57,18 @@ Jogo online multiplayer de deducao de palavras. Um jogador escolhe uma celula do
 │   └── migrations/
 │       └── 20250718_create_words_table.sql
 ├── server.js                 # Servidor Express + Socket.IO
-├── words.json                # Palavras fallback (local)
-└── .env                      # Variaveis de ambiente
+├── public/
+│   └── words.json            # Palavras fallback (EN/PT)
+├── Dockerfile                # Container de producao
+├── .dockerignore
+├── .env.example              # Template de variaveis de ambiente
+└── .env                      # Variaveis de ambiente (nao versionado)
 ```
 
 ## Pre-requisitos
 
 - Node.js 18+
-- Conta no [Supabase](https://supabase.com)
+- Conta no [Supabase](https://supabase.com) (opcional — words.json funciona como fallback)
 
 ## Instalacao
 
@@ -85,6 +91,44 @@ cp .env.example .env
 SUPABASE_URL=https://sua-url.supabase.co
 SUPABASE_KEY=sua-chave-aqui
 PORT=3000
+ADMIN_SECRET=seu-admin-secret
+```
+
+## Deploy com Docker
+
+```bash
+# Build da imagem
+docker build -t crossclues .
+
+# Rodar o container
+docker run -d \
+  --name crossclues \
+  -p 3000:3000 \
+  -e SUPABASE_URL=https://your-project.supabase.co \
+  -e SUPABASE_KEY=your-key \
+  -e ADMIN_SECRET=your-admin-secret \
+  -e NODE_ENV=production \
+  crossclues
+
+# Verificar logs
+docker logs -f crossclues
+```
+
+## Deploy sem Docker
+
+```bash
+# Instalar dependencias
+npm install
+
+# Configurar variaveis de ambiente
+cp .env.example .env
+# Editar .env
+
+# Build de producao
+npx next build
+
+# Iniciar
+NODE_ENV=production node server.js
 ```
 
 ## Configuracao do Supabase
@@ -92,7 +136,9 @@ PORT=3000
 1. Acesse o painel do Supabase
 2. Va em **SQL Editor**
 3. Execute o conteudo do arquivo `supabase/migrations/20250718_create_words_table.sql`
-4. Isso cria a tabela `words` com 100 palavras em ingles
+4. Isso cria a tabela `words` com palavras em ingles
+
+> **Nota:** O jogo funciona sem Supabase usando `public/words.json` como fallback.
 
 ## Execucao
 
@@ -116,14 +162,21 @@ NODE_ENV=production npm start
 # Type check (tipagem)
 npx tsc --noEmit
 
-# Build de producao (Next.js / Turbopack)
+# Build de producao (Next.js)
 npx next build
 ```
 
-> **Nota:** O endpoint `/api/import-words` inicializa o cliente Supabase de forma
-> lazy, entao o build nao exige credenciais do Supabase para rodar.
+## Regras de Jogo
 
-## Validacao de Dicas (US-01 / US-02 / US-03)
+### Regras Oficiais
+- **Minimo 2 jogadores** para iniciar
+- **Pontuacao cooperativa**: pontuacao da equipe = numero de celulas reveladas
+- **1 palpite por dica**: o grupo pode fazer apenas um palpite por dica do dador
+- **Dador NAO pode palpitar**: quem deu a dica nao pode adivinhar
+- **Avanco de turno**: apos acerto ou erro, sempre avanca para o proximo jogador
+- **Fim de jogo**: todas as celulas reveladas OU baralho e descarte vazios
+
+### Validacao de Dicas (US-01 / US-02 / US-03)
 
 As dicas passam por duas camadas de validacao:
 
@@ -136,16 +189,42 @@ As dicas passam por duas camadas de validacao:
 5. Nao pode ser uma sigla de 2-3 letras maiusculas (ex.: "USA")
 6. Maximo 15 caracteres
 
-### Server-side (`server.js` → `validateClue`)
+### Server-side (`server.js` -> `validateClue`)
 *Validacao de autoridade no servidor* antes de persistir a dica:
 - Mesmas regras da validacao client-side (nao confiar so no cliente)
 - Controle de turno (`notYourTurn`)
-- **Sanitizacao XSS** (`/[\<\>\"\'&]/`) — rejeita `<`, `>`, `"`, `'`, `&` (bug M3)
-- Persistencia da dica sempre com `.trim()` (bug m2)
+- **Sanitizacao XSS** (`/[\<\>\"\'&]/`) -- rejeita `<`, `>`, `"`, `'`, `&`
+- Persistencia da dica sempre com `.trim()`
 
-### Acessibilidade (bug m4)
+### Acessibilidade
 O campo de dica usa `aria-invalid` e `aria-describedby` apontando para o
 elemento de erro com `role="alert"` e `aria-live="assertive"`.
+
+## Reconexao (US-009)
+
+O jogo suporta reconexao automatica:
+- O cliente tenta reconectar apos desconexao (reconnection: true)
+- O servidor mantem o estado da sala por 30 segundos apos disconnect
+- Para reconectar, emita `rejoin-room` com `roomCode` e `playerId` (playerToken)
+
+### Configuracao do Socket.IO (cliente)
+```javascript
+const socket = io({
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: 30,
+});
+```
+
+### Evento rejoin-room
+```javascript
+// Request
+socket.emit('rejoin-room', { roomCode, playerId, playerName }, (response) => {
+  if (response.success) {
+    console.log('Reconectado!', response.room);
+  }
+});
+```
 
 ## Importar Palavras
 
@@ -202,7 +281,7 @@ CREATE POLICY "allow read for anon" ON public.words FOR SELECT TO anon USING (is
 3. **Iniciar jogo** - O host inicia quando todos entrarem (minimo 2 jogadores)
 4. **Dar dicas** - Na sua vez, selecione uma celula do grid e escreva uma dica que relacione as duas palavras
 5. **Adivinhar** - Os outros jogadores clicam na celula que acham que corresponde a dica
-6. **Pontuacao** - Acerto = 1 ponto. Errar = perde a dica e vez
+6. **Pontuacao** - Pontuacao cooperativa: cada acerto revela uma celula e soma ao total da equipe
 
 ## Licenca
 
