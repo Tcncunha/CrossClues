@@ -16,9 +16,9 @@ const ui = {
     wordLang: 'Word Language',
     create: 'Deal the Cards',
     difficulties: [
-      { value: 'facil', label: 'Easy' },
-      { value: 'medio', label: 'Medium' },
-      { value: 'dificil', label: 'Hard' },
+      { value: 'easy', label: 'Easy' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'hard', label: 'Hard' },
     ],
     languages: [
       { value: 'EN', label: 'English' },
@@ -35,9 +35,9 @@ const ui = {
     wordLang: 'Idioma das Palavras',
     create: 'Distribuir as Cartas',
     difficulties: [
-      { value: 'facil', label: 'Facil' },
-      { value: 'medio', label: 'Medio' },
-      { value: 'dificil', label: 'Dificil' },
+      { value: 'easy', label: 'Fácil' },
+      { value: 'medium', label: 'Médio' },
+      { value: 'hard', label: 'Difícil' },
     ],
     languages: [
       { value: 'EN', label: 'Ingles' },
@@ -71,7 +71,7 @@ function Chip({ selected, onClick, children }: { selected: boolean; onClick: () 
 }
 
 export default function GameConfig({ onConfirm, lang }: Props) {
-  const [difficulty, setDifficulty] = useState('medio');
+  const [difficulty, setDifficulty] = useState('medium');
   const [gridSize, setGridSize] = useState(4);
   const [wordLanguage, setWordLanguage] = useState('EN');
   const t = ui[lang];

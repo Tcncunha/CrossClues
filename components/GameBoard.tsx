@@ -97,18 +97,7 @@ export default function GameBoard({ room, playerId, selectedClueCell, onSelectCe
 
   const handleSubmit = () => {
     const trimmed = clueInput.trim();
-    if (!trimmed) {
-      setClueValidationError('empty');
-      return;
-    }
-
-    const validationError = validateClueLocal(clueInput);
-    if (validationError) {
-      setClueValidationError(validationError);
-      return;
-    }
-
-    setClueValidationError(null);
+    if (!trimmed) return;
     onSubmitClue(trimmed);
     setClueInput('');
   };

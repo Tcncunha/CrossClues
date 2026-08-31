@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -56,13 +56,13 @@
           <label>Dificuldade</label>
           <div class="radio-group">
             <label class="radio-label">
-              <input type="radio" name="difficulty" value="easy"> Fácil
+              <input type="radio" name="difficulty" value="facil"> Fácil
             </label>
             <label class="radio-label">
-              <input type="radio" name="difficulty" value="medium" checked> Médio
+              <input type="radio" name="difficulty" value="medio" checked> Médio
             </label>
             <label class="radio-label">
-              <input type="radio" name="difficulty" value="hard"> Difícil
+              <input type="radio" name="difficulty" value="dificil"> Difícil
             </label>
           </div>
         </div>

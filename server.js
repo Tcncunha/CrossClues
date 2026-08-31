@@ -1,5 +1,8 @@
 require('dotenv').config();
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const next = require('next');
@@ -13,6 +16,68 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+
+const { z } = require('zod');
+
+// --- Validation schemas and helpers (B1/B2/B9) ---
+const VALID_DIFFICULTIES = ['easy', 'medium', 'hard'];
+const DIFFICULTY_MAP = { easy: 1, medium: 2, hard: 3 };
+const LEGACY_DIFFICULTY_MAP = { facil: 'easy', medio: 'medium', dificil: 'hard' };
+const VALID_LANGUAGES = ['EN', 'PT', 'ES', 'PL', 'ZH'];
+
+const selectClueSchema = z.object({
+  row: z.number().int().min(0).max(4),
+  col: z.number().int().min(0).max(4),
+});
+
+const guessSchema = z.object({
+  row: z.number().int().min(0).max(4),
+  col: z.number().int().min(0).max(4),
+});
+
+function sanitizeGridSize(value) {
+  return Math.min(5, Math.max(3, Number(value) || 4));
+}
+
+function sanitizeDifficulty(value) {
+  const normalized = LEGACY_DIFFICULTY_MAP[value] || value;
+  return VALID_DIFFICULTIES.includes(normalized) ? normalized : 'medium';
+}
+
+function sanitizeWordLanguage(value) {
+  return VALID_LANGUAGES.includes(value) ? value : 'EN';
+}
+
+function sanitizePlayerName(value) {
+  if (typeof value !== 'string') return 'Player';
+  const trimmed = value.trim().slice(0, 15);
+  return trimmed.length > 0 ? trimmed : 'Player';
+}
+
+// --- Admin auth & rate limiting (B4/B5/B6) ---
+function requireAdminAuth(req, res, next) {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    return next();
+  }
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (token !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests' },
+});
 
 const wordCache = {};
 
@@ -129,19 +194,19 @@ async function loadWordsByLanguage(language) {
 
   const { data, error } = await supabase
     .from('words')
-    .select('word, Level')
+    .select('word, level')
     .eq('language', language)
     .eq('is_active', true);
 
   if (error) throw error;
 
-  const result = { facil: [], medio: [], dificil: [] };
+  const result = { easy: [], medium: [], hard: [] };
   data.forEach(row => {
-    const level = row.Level;
+    const level = row.level ?? row.Level;
     const word = row.word;
-    if (level === 1) result.facil.push(word);
-    else if (level === 2) result.medio.push(word);
-    else if (level === 3) result.dificil.push(word);
+    if (level === 1) result.easy.push(word);
+    else if (level === 2) result.medium.push(word);
+    else if (level === 3) result.hard.push(word);
   });
 
   wordCache[language] = result;
@@ -209,22 +274,25 @@ function createCardDeck(grid, gridSize) {
 }
 
 function createRoom(hostName, difficulty, gridSize, wordLanguage) {
+  const sanitizedGridSize = sanitizeGridSize(gridSize);
+  const sanitizedDifficulty = sanitizeDifficulty(difficulty);
+  const sanitizedLanguage = sanitizeWordLanguage(wordLanguage);
   const code = generateRoomCode();
   const room = {
     code,
     host: null,
     players: [],
     state: 'waiting',
-    difficulty: difficulty || 'medio',
-    gridSize: gridSize || 4,
-    wordLanguage: wordLanguage || 'EN',
+    difficulty: sanitizedDifficulty,
+    gridSize: sanitizedGridSize,
+    wordLanguage: sanitizedLanguage,
     rows: [],
     cols: [],
     grid: [],
     currentTurn: 0,
     scores: {},
     cluesGiven: 0,
-    maxClues: gridSize * gridSize,
+    maxClues: sanitizedGridSize * sanitizedGridSize,
     currentClue: null,
     cardDeck: [],
     discardPile: [],
@@ -286,25 +354,36 @@ app.prepare().then(() => {
   const httpServer = createServer(server);
   const io = new Server(httpServer);
 
-  // REST API routes
-  server.get('/api/reload-words', async (req, res) => {
+  // Security middleware
+  server.use(helmet());
+  server.use(cors());
+  server.use(express.json({ limit: '10kb' }));
+
+  // REST API routes (protected where required)
+  server.get('/api/reload-words', requireAdminAuth, adminLimiter, async (req, res) => {
     Object.keys(wordCache).forEach(k => delete wordCache[k]);
     res.json({ success: true, message: 'Word cache cleared' });
   });
 
   server.get('/api/words', (req, res) => {
+    const keys = Object.keys(wordCache);
     res.json({
-      wordCacheKeys: Object.keys(wordCache),
+      wordCacheKeys: keys,
+      levelCacheKeys: keys,
     });
   });
 
-  server.use(express.json());
-
-  server.post('/api/words', async (req, res) => {
-    const { word, Level, language } = req.body;
-    if (!word) return res.status(400).json({ error: 'word is required' });
+  server.post('/api/words', requireAdminAuth, adminLimiter, async (req, res) => {
+    const { word, level, language } = req.body;
+    const legacyLevel = req.body.Level;
+    const rawLevel = level ?? legacyLevel ?? 1;
+    const finalLevel = [1,2,3].includes(Number(rawLevel)) ? Number(rawLevel) : 1;
+    const finalLanguage = VALID_LANGUAGES.includes(language) ? language : 'EN';
+    const sanitizedWord = typeof word === 'string' ? word.trim().toUpperCase().slice(0, 20) : '';
+    if (!sanitizedWord) return res.status(400).json({ error: 'word is required' });
+    if (!/^[A-Z]+$/.test(sanitizedWord)) return res.status(400).json({ error: 'word must contain only letters A-Z' });
     try {
-      const { data, error } = await supabase.from('words').insert([{ word, Level: Level || 1, language: language || 'EN', is_active: true }]).select();
+      const { data, error } = await supabase.from('words').insert([{ word: sanitizedWord, level: finalLevel, language: finalLanguage, is_active: true }]).select();
       if (error) throw error;
       res.json({ success: true, word: data[0] });
     } catch (err) {
@@ -312,23 +391,23 @@ app.prepare().then(() => {
     }
   });
 
-  // Supabase test endpoints
-  server.get('/api/supabase/test', async (req, res) => {
+  // Supabase test endpoint - no URL/sample exposure (B5)
+  server.get('/api/supabase/test', requireAdminAuth, adminLimiter, async (req, res) => {
     try {
-      const { data, error, count } = await supabase.from('words').select('*', { count: 'exact' }).limit(5);
+      const { count, error } = await supabase.from('words').select('*', { count: 'exact', head: true });
       if (error) throw error;
-      res.json({ success: true, connected: true, sample: data, totalCount: count, url: process.env.SUPABASE_URL });
+      res.json({ success: true, connected: true, totalCount: count });
     } catch (err) {
-      res.json({ success: false, connected: false, error: err.message, url: process.env.SUPABASE_URL });
+      res.json({ success: false, connected: false, totalCount: 0 });
     }
   });
 
-  server.get('/api/supabase/tables', async (req, res) => {
+  server.get('/api/supabase/tables', requireAdminAuth, adminLimiter, async (req, res) => {
     try {
       const { data: words, error: wordsErr } = await supabase.from('words').select('*').limit(20);
       if (wordsErr) throw wordsErr;
-      const counts = { Level1: 0, Level2: 0, Level3: 0 };
-      words.forEach(r => { if (r.Level) counts['Level' + r.Level]++; });
+      const counts = { level1: 0, level2: 0, level3: 0 };
+      words.forEach(r => { const lvl = r.level ?? r.Level; if (lvl) counts['level' + lvl]++; });
       res.json({ success: true, tables: { words: { data: words, counts } } });
     } catch (err) {
       res.json({ success: false, error: err.message });
@@ -340,8 +419,12 @@ app.prepare().then(() => {
     console.log(`Jogador conectado: ${socket.id}`);
 
     socket.on('create-room', async ({ playerName, difficulty, gridSize, wordLanguage }, callback) => {
-      const room = createRoom(playerName, difficulty || 'medio', gridSize || 4, wordLanguage || 'EN');
-      const player = { id: socket.id, name: playerName, isHost: true, color: getPlayerColor(0) };
+      const sanitizedPlayerName = sanitizePlayerName(playerName);
+      const sanitizedGridSize = sanitizeGridSize(gridSize);
+      const sanitizedDifficulty = sanitizeDifficulty(difficulty);
+      const sanitizedLanguage = sanitizeWordLanguage(wordLanguage);
+      const room = createRoom(sanitizedPlayerName, sanitizedDifficulty, sanitizedGridSize, sanitizedLanguage);
+      const player = { id: socket.id, name: sanitizedPlayerName, isHost: true, color: getPlayerColor(0) };
       room.host = socket.id;
       room.players.push(player);
       room.scores[socket.id] = 0;
@@ -351,11 +434,12 @@ app.prepare().then(() => {
     });
 
     socket.on('join-room', ({ roomCode, playerName }, callback) => {
+      const sanitizedJoinName = sanitizePlayerName(playerName);
       const room = rooms.get(roomCode);
       if (!room) return callback({ success: false, error: 'Sala nao encontrada' });
       if (room.state !== 'waiting') return callback({ success: false, error: 'Jogo ja comecou' });
       if (room.players.length >= 6) return callback({ success: false, error: 'Sala cheia (max. 6 jogadores)' });
-      const player = { id: socket.id, name: playerName, isHost: false, color: getPlayerColor(room.players.length) };
+      const player = { id: socket.id, name: sanitizedJoinName, isHost: false, color: getPlayerColor(room.players.length) };
       room.players.push(player);
       room.scores[socket.id] = 0;
       socket.join(room.code);
@@ -383,8 +467,11 @@ app.prepare().then(() => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
       if (room.players.length < 1) return callback({ success: false, error: 'Minimo 1 jogador' });
+      room.gridSize = sanitizeGridSize(room.gridSize);
+      room.difficulty = sanitizeDifficulty(room.difficulty);
+      room.wordLanguage = sanitizeWordLanguage(room.wordLanguage);
       const wordLists = await loadWordsByLanguage(room.wordLanguage);
-      const words = wordLists[room.difficulty] || wordLists.medio;
+      const words = wordLists[room.difficulty] || wordLists.medium;
       const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
@@ -440,11 +527,16 @@ app.prepare().then(() => {
     socket.on('select-clue-cell', ({ row, col }, callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
+      const parsed = selectClueSchema.safeParse({ row, col });
+      if (!parsed.success) return callback({ success: false, error: 'Coordenadas inválidas' });
+      if (row >= room.gridSize || col >= room.gridSize) return callback({ success: false, error: 'Coordenadas inválidas: fora dos limites da grade ' + room.gridSize + 'x' + room.gridSize });
       const currentPlayer = room.players[room.currentTurn];
       if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez de dar dica' });
       if (!room.drawnCard) return callback({ success: false, error: 'Voce precisa comprar uma carta primeiro' });
       if (row !== room.drawnCard.row || col !== room.drawnCard.col) return callback({ success: false, error: 'So pode usar a celula da carta comprada' });
+      if (!room.grid[row] || !room.grid[row][col]) return callback({ success: false, error: 'Coordenadas inválidas' });
       const cell = room.grid[row][col];
+      if (!cell) return callback({ success: false, error: 'Coordenadas inválidas' });
       if (cell.revealed) return callback({ success: false, error: 'Celula ja foi revelada' });
       room.currentClue = { row, col, rowWord: cell.rowWord, colWord: cell.colWord };
       io.to(room.code).emit('clue-cell-selected', { row, col, clueGiver: currentPlayer.name, isClueGiver: true });
@@ -480,18 +572,24 @@ app.prepare().then(() => {
 
       // Persist the validated clue
       const { row, col } = room.currentClue;
-      room.grid[row][col].clue = clue.trim();
+      room.grid[row][col].clue = clue;
       room.grid[row][col].clueBy = currentPlayer.name;
       room.cluesGiven++;
       room.drawnCard = null;
-      io.to(room.code).emit('clue-given', { row, col, clue: clue.trim(), clueBy: currentPlayer.name });
+      io.to(room.code).emit('clue-given', { row, col, clue, clueBy: currentPlayer.name });
       callback({ success: true });
     });
 
     socket.on('guess-cell', ({ row, col }, callback) => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.state !== 'playing') return callback({ success: false, error: 'Jogo nao esta ativo' });
+      const parsedGuess = guessSchema.safeParse({ row, col });
+      if (!parsedGuess.success) return callback({ success: false, error: 'Coordenadas inválidas' });
+      if (row >= room.gridSize || col >= room.gridSize) return callback({ success: false, error: 'Coordenadas inválidas: fora dos limites da grade ' + room.gridSize + 'x' + room.gridSize });
+      if (!room.currentClue) return callback({ success: false, error: 'Sem dica ativa' });
+      if (!room.grid[row] || !room.grid[row][col]) return callback({ success: false, error: 'Coordenadas inválidas' });
       const cell = room.grid[row][col];
+      if (!cell) return callback({ success: false, error: 'Coordenadas inválidas' });
       if (cell.revealed) return callback({ success: false, error: 'Celula ja foi revelada' });
       const currentPlayer = room.players[room.currentTurn];
       if (currentPlayer && currentPlayer.id === socket.id) return callback({ success: false, error: 'Quem deu a dica nao pode adivinhar' });
@@ -529,7 +627,7 @@ app.prepare().then(() => {
       const room = rooms.get(socket.roomCode);
       if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
       const wordLists = await loadWordsByLanguage(room.wordLanguage);
-      const words = wordLists[room.difficulty] || wordLists.medio;
+      const words = wordLists[room.difficulty] || wordLists.medium;
       const { rows, cols, grid } = createGrid(words, room.gridSize);
       room.rows = rows; room.cols = cols; room.grid = grid;
       room.state = 'playing'; room.currentTurn = 0; room.cluesGiven = 0; room.currentClue = null;
@@ -597,7 +695,7 @@ app.prepare().then(() => {
 
   httpServer.listen(PORT, () => {
     console.log(`=================================`);
-    console.log(`  Entre Linhas Online (Next.js)`);
+    console.log(`  CrossClues Online (Next.js)`);
     console.log(`  Rodando em http://localhost:${PORT}`);
     console.log(`=================================`);
   });
