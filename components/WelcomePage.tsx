@@ -121,7 +121,8 @@ export default function WelcomePage({ onPlay, lang, onLangChange }: Props) {
             <h1 className="font-display text-4xl font-extrabold tracking-tight text-shimmer">
               CrossClues
             </h1>
-            <p className="text-text-secondary mt-1 text-sm tracking-wide">{t.subtitle}</p>
+            <span className="inline-block mt-1 px-2 py-0.5 bg-accent-light/15 border border-accent-light/30 text-accent-light text-xs font-mono-label rounded-full">Beta v0.0.5</span>
+            <p className="text-text-secondary mt-2 text-sm tracking-wide">{t.subtitle}</p>
           </div>
 
           <div className="flex gap-1">
