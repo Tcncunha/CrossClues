@@ -16,7 +16,7 @@ const content = {
   en: {
     subtitle: 'A Word Deduction Game',
     play: 'Sit Down to Play',
-    tabs: { home: 'Home', howto: 'How to Play', tips: 'Tips' },
+    tabs: { home: 'Home', howto: 'How to Play', tips: 'Tips', rules: 'Rules' },
     overview: 'CrossClues is a real-time multiplayer word game where players take turns giving clues to help others identify cells on a crossword-style grid.',
     objective: 'Objective',
     objectiveText: 'Reveal all cells on the grid by correctly guessing which intersection each clue refers to.',
@@ -41,7 +41,7 @@ const content = {
   pt: {
     subtitle: 'Um Jogo de Deducao com Palavras',
     play: 'Sentar e Jogar',
-    tabs: { home: 'Inicio', howto: 'Como Jogar', tips: 'Dicas' },
+    tabs: { home: 'Inicio', howto: 'Como Jogar', tips: 'Dicas', rules: 'Regras' },
     overview: 'CrossClues (Entre Linhas) e um jogo de palavras multijogador em tempo real onde os jogadores revezam dando dicas para ajudar outros a identificar celulas em uma grade estilo cruzada.',
     objective: 'Objetivo',
     objectiveText: 'Revele todas as celulas da grade acertando a qual intersecao cada dica se refere.',

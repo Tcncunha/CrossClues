@@ -26,6 +26,7 @@ const ui = {
       { value: 'ES', label: 'Espanol' },
       { value: 'PL', label: 'Polski' },
       { value: 'ZH', label: 'Chinese' },
+      { value: 'AR', label: 'العربية' },
     ],
   },
   pt: {
@@ -45,6 +46,7 @@ const ui = {
       { value: 'ES', label: 'Espanhol' },
       { value: 'PL', label: 'Polones' },
       { value: 'ZH', label: 'Chines' },
+      { value: 'AR', label: 'Árabe' },
     ],
   },
 };

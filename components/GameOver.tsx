@@ -45,17 +45,8 @@ const ui = {
   },
 };
 
-function initials(name: string) {
-  return name.trim().slice(0, 2).toUpperCase() || '??';
-}
-
 export default function GameOver({ room, playerId, onRestart, onBackToMenu, lang }: Props) {
   const t = ui[lang];
-  const sorted = room.players
-    .map(p => ({ ...p, score: room.scores[p.id] || 0 }))
-    .sort((a, b) => b.score - a.score);
-
-  const medals = ['🥇', '🥈', '🥉'];
   const colLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').slice(0, room.gridSize);
   const totalRevealed = room.grid.flat().filter(c => c.revealed).length;
   const totalCells = room.gridSize * room.gridSize;
@@ -68,7 +59,7 @@ export default function GameOver({ room, playerId, onRestart, onBackToMenu, lang
           {t.title}
         </h2>
 
-        {/* Team rating classification */}
+        {/* US-005: Team rating classification (only) */}
         <div
           className="mb-6 p-4 rounded-cell border-2 text-center"
           style={{ borderColor: RATING_COLOR_TOKENS[rating.id], backgroundColor: `${RATING_COLOR_TOKENS[rating.id]}1a` }}
@@ -86,25 +77,6 @@ export default function GameOver({ room, playerId, onRestart, onBackToMenu, lang
           </div>
         </div>
 
-        <div className="mb-6 space-y-2">
-          {sorted.map((p, i) => (
-            <div
-              key={p.id}
-              className={`flex items-center gap-3 p-3 rounded-cell ${i === 0 ? 'border-2 border-accent-light bg-accent-light/10' : 'bg-bg-primary border border-border'}`}
-            >
-              <span className="text-xl w-8 text-center">{medals[i] ?? `${i + 1}º`}</span>
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-mono-label font-bold text-paper shrink-0"
-                style={{ background: p.color }}
-              >
-                {initials(p.name)}
-              </div>
-              <span className="flex-1 font-semibold">{p.name}</span>
-              <span className="text-lg font-display font-bold text-accent-light">{p.score} pts</span>
-            </div>
-          ))}
-        </div>
-
         {/* Full scoring reference */}
         <div className="mb-6">
           <h3 className="text-xs uppercase tracking-widest text-text-muted font-semibold text-center mb-3">
@@ -117,7 +89,7 @@ export default function GameOver({ room, playerId, onRestart, onBackToMenu, lang
 
         <div className="mb-6">
           <h3 className="text-xs uppercase tracking-widest text-text-muted font-semibold text-center mb-3">
-            {t.grid} · {totalRevealed}/{totalCells} {t.cells}
+            {t.grid} &middot; {totalRevealed}/{totalCells} {t.cells}
           </h3>
           <div className="overflow-x-auto">
             <div className="inline-grid gap-1 mx-auto" style={{ gridTemplateColumns: `minmax(64px, 90px) repeat(${room.gridSize}, minmax(56px, 80px))` }}>
@@ -145,7 +117,7 @@ export default function GameOver({ room, playerId, onRestart, onBackToMenu, lang
                           <span className="text-warning font-semibold text-[0.7rem]">{cell.clue}</span>
                         )}
                         <span className="text-ink text-[0.5rem] font-semibold mt-0.5">
-                          {cell.rowWord} × {cell.colWord}
+                          {cell.rowWord} x {cell.colWord}
                         </span>
                       </div>
                     );

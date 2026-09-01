@@ -16,7 +16,7 @@ const handle = app.getRequestHandler();
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_KEY
+  process.env.SUPABASE_KEY
 );
 
 const { z } = require('zod');
@@ -29,7 +29,7 @@ const MIN_PLAYERS_TO_START = 2;
 const VALID_DIFFICULTIES = ['easy', 'medium', 'hard'];
 const DIFFICULTY_MAP = { easy: 1, medium: 2, hard: 3 };
 const LEGACY_DIFFICULTY_MAP = { facil: 'easy', medio: 'medium', dificil: 'hard' };
-const VALID_LANGUAGES = ['EN', 'PT', 'ES', 'PL', 'ZH', 'AR'];
+const VALID_LANGUAGES = ['EN', 'PT', 'ES', 'PL', 'ZH'];
 
 const selectClueSchema = z.object({
   row: z.number().int().min(0).max(4),
@@ -393,17 +393,6 @@ function checkAllRevealed(room) {
   return true;
 }
 
-function advanceTurnSkippingBots(room) {
-  if (!room.players.length) return;
-  let nextTurn = (room.currentTurn + 1) % room.players.length;
-  let attempts = 0;
-  while (attempts < room.players.length && room.players[nextTurn]?.id?.startsWith('bot_')) {
-    nextTurn = (nextTurn + 1) % room.players.length;
-    attempts++;
-  }
-  room.currentTurn = nextTurn;
-}
-
 /**
  * Remove a player from a room after the disconnect grace period expires.
  * Handles host reassignment, turn adjustment, and room cleanup.
@@ -448,7 +437,7 @@ app.prepare().then(() => {
   });
 
   // Security middleware
-  server.use(helmet({ contentSecurityPolicy: false }));
+  server.use(helmet());
   server.use(cors());
   server.use(express.json({ limit: '10kb' }));
 
@@ -631,9 +620,9 @@ app.prepare().then(() => {
     });
 
     // ── START GAME ───────────────────────────────────────────────────────────
-    socket.on('start-game', async (callback) => {
+    socket.on('start-game' /* DIAG */, async (callback) => {
       const room = rooms.get(socket.roomCode);
-      if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
+      console.log('DIAG start-game IN, callback=', typeof callback); if (room && room.host !== socket.id) { console.log('DIAG not host, socket=',socket.id,'host=',room.host); } if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode iniciar' });
 
       // US-001: minimum 2 players
       if (room.players.length < MIN_PLAYERS_TO_START) {
@@ -644,7 +633,7 @@ app.prepare().then(() => {
       room.difficulty = sanitizeDifficulty(room.difficulty);
       room.wordLanguage = sanitizeWordLanguage(room.wordLanguage);
 
-      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      console.log('DIAG before await'); const wordLists = await loadWordsByLanguage(room.wordLanguage);
       const words = wordLists[room.difficulty] || wordLists.medium;
 
       // B2: Validate minimum words available
@@ -734,13 +723,11 @@ app.prepare().then(() => {
       const currentPlayer = room.players[room.currentTurn];
       if (!currentPlayer || currentPlayer.id !== socket.id) return callback({ success: false, error: 'Nao e sua vez' });
       if (!room.drawnCard) return callback({ success: false, error: 'Voce nao comprou uma carta' });
-      // Fix: return card to deck at random position instead of discarding permanently
-      // Previously: room.discardPile.push(room.drawnCard) caused card to disappear
-      room.cardDeck.splice(Math.floor(Math.random() * (room.cardDeck.length + 1)), 0, room.drawnCard);
+      room.discardPile.push(room.drawnCard);
       room.drawnCard = null;
       room.currentClue = null;
       room.groupGuessMade = false;
-      advanceTurnSkippingBots(room);
+      room.currentTurn = (room.currentTurn + 1) % room.players.length;
       io.to(room.code).emit('turn-passed', { passedBy: currentPlayer.name, currentTurn: room.currentTurn, currentPlayer: room.players[room.currentTurn]?.name });
       callback({ success: true });
     });
@@ -900,9 +887,9 @@ app.prepare().then(() => {
     // ── RESTART GAME ─────────────────────────────────────────────────────────
     socket.on('restart-game', async (callback) => {
       const room = rooms.get(socket.roomCode);
-      if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
+      console.log('DIAG start-game IN, callback=', typeof callback); if (room && room.host !== socket.id) { console.log('DIAG not host, socket=',socket.id,'host=',room.host); } if (!room || room.host !== socket.id) return callback({ success: false, error: 'Apenas o host pode reiniciar' });
 
-      const wordLists = await loadWordsByLanguage(room.wordLanguage);
+      console.log('DIAG before await'); const wordLists = await loadWordsByLanguage(room.wordLanguage);
       const words = wordLists[room.difficulty] || wordLists.medium;
 
       // B2: Validate minimum words
@@ -995,3 +982,4 @@ app.prepare().then(() => {
     console.log(`=================================`);
   });
 });
+
