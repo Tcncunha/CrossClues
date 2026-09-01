@@ -172,7 +172,7 @@ export default function AdminPage() {
                     <div className="mt-3">
                       <p className="text-sm text-gray-400 mb-1">By level:</p>
                       <div className="flex flex-wrap gap-2">
-                        {Object.entries(stats!.byLevel ?? stats!.byLength ?? {})
+                        {Object.entries((stats!.byLevel ?? stats!.byLength ?? {}) as Record<string, number>)
                           .sort(([a], [b]) => Number(a) - Number(b))
                           .map(([level, quantity]) => (
                             <span
